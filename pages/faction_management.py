@@ -174,7 +174,7 @@ def render():
             st.markdown("**📊 Daily Summary**")
             if st.button("📈 Send Daily Summary", help="Send yesterday's activity summary to Discord"):
                 try:
-                    api_client.post_json("discord/trigger/daily-summary")
+                    api_client.post_json("summary/discord/tick")
                     st.success("✅ Daily summary sent to Discord!")
                 except Exception as e:
                     st.error(f"❌ Error: {str(e)}")
@@ -192,7 +192,7 @@ def render():
             )
             if st.button("🚀 Send Space CZ", help="Send space conflict zone summary"):
                 try:
-                    api_client.post_json("discord/trigger/space-cz-summary", {"period": period_space})
+                    api_client.post_json("summary/discord/syntheticcz", {"period": period_space})
                     st.success(f"✅ Space CZ summary sent ({period_space})!")
                 except Exception as e:
                     st.error(f"❌ Error: {str(e)}")
@@ -210,7 +210,7 @@ def render():
             )
             if st.button("🔫 Send Ground CZ", help="Send ground conflict zone summary"):
                 try:
-                    api_client.post_json("discord/trigger/ground-cz-summary", {"period": period_ground})
+                    api_client.post_json("summary/discord/syntheticgroundcz", {"period": period_ground})
                     st.success(f"✅ Ground CZ summary sent ({period_ground})!")
                 except Exception as e:
                     st.error(f"❌ Error: {str(e)}")
