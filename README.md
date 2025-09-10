@@ -4,7 +4,7 @@
 
 ## Project Description
 
-This dashboard is designed for the analysis and visualization of activities related to the East India Company (EIC) in Elite Dangerous. It provides various pages for analyzing leaderboards, CZ activities (Space & Ground), table views, and more.
+This dashboard is designed for the analysis and visualization of activities related to the Communism Interstellar (EIC) in Elite Dangerous. It provides various pages for analyzing leaderboards, CZ activities (Space & Ground), table views, and more.
 It can be easily adapted to other factions or groups by changing the API endpoint and adjusting the filters accordingly.
 
 ## Features

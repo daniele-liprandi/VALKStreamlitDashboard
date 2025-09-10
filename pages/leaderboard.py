@@ -118,7 +118,7 @@ def render():
         plotly_options = {
             "M.compl.": "Missions Completed",
             "M.failed": "Missions Failed",
-            "Inf.-EIC": "Influence (East India Company)",
+            "Inf.-EIC": "Influence (Communism Interstellar)",
             "Buy (Cr.)": "Total Buy",
             "Sell (Cr.)": "Total Sell",
             "Profit (Cr.)": "Profit",

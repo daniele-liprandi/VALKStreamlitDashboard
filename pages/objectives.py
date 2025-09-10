@@ -24,7 +24,7 @@ def render():
         with col1:
             filter_system = st.text_input("Filter by System", placeholder="e.g. Kachian")
         with col2:
-            filter_faction = st.text_input("Filter by Faction", placeholder="e.g. East India Company")
+            filter_faction = st.text_input("Filter by Faction", placeholder="e.g. Communism Interstellar")
 
         # Fetch objectives with filters
         params = {}
@@ -71,7 +71,7 @@ def render():
             "boost", "expand", "reduce", "retreat", "equalise"
         ])
         system = st.text_input("Target System", placeholder="e.g. Sol")
-        faction = st.text_input("Primary Faction", placeholder="e.g. East India Company")
+        faction = st.text_input("Primary Faction", placeholder="e.g. Communism Interstellar")
         description = st.text_area("Description (optional)")
 
         startdate = st.date_input("Start Date", value=datetime.today())

@@ -45,7 +45,7 @@ st.markdown("""
 # Login-Ansicht
 if "user" not in st.session_state:
     with st.sidebar:
-        st.image("assets/VALT_logo.jpg", width=210)
+        st.image("assets/CIU.png", width=210)
         st.markdown('<div class="sidebar-logo-separator"></div>', unsafe_allow_html=True)
     with st.form("login_form"):
         st.title("Login")
@@ -63,21 +63,29 @@ if "user" not in st.session_state:
 
 # Sidebar mit Logo und Menü
 with st.sidebar:
-    st.image("assets/VALT_logo.jpg", width=210)
+    st.image("assets/CIU.png", width=210)
     st.markdown('<div class="sidebar-logo-separator"></div>', unsafe_allow_html=True)
     st.success(f"Logged in as: {st.session_state.user['username']}")
+    
+    # Build menu based on user permissions
+    menu_items = [
+        "📊 Table Viewer",
+        "📈 Evaluations", 
+        "🧑 Cmdrs",
+        "🏆 Leaderboard",
+        "🎯 Objectives",
+        "🆕 Recruits",
+        "🪙 Redeem Vouchers",
+        "⚔️ CZ Summary"
+    ]
+    
+    # Add admin-only pages
+    if st.session_state.user.get("is_admin"):
+        menu_items.append("🏛️ Faction Management")
+    
     page = st.radio(
         "📂 Menu",
-        [
-            "📊 Table Viewer",
-            "📈 Evaluations",
-            "🧑 Cmdrs",
-            "🏆 Leaderboard",
-            "🎯 Objectives",
-            "🆕 Recruits",
-            "🪙 Redeem Vouchers",
-            "⚔️ CZ Summary"
-        ],
+        menu_items,
         index=3
     )
 
@@ -106,3 +114,6 @@ elif page == "🪙 Redeem Vouchers":
 elif page == "⚔️ CZ Summary":
     from pages import cz_summary
     cz_summary.main()
+elif page == "🏛️ Faction Management":
+    from pages import faction_management
+    faction_management.render()
