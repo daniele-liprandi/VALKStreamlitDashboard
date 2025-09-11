@@ -2,8 +2,8 @@ streamlit~=1.46.1
 requests~=2.32.4
 bcrypt
 pandas~=2.3.0
-streamlit-aggrid~=1.1.6
-matplotlib~=3.10.3
-altair~=5.5.0
-plotly~=6.2.0
-python-dotenv~=1.0.1
+streamlit-aggrid
+matplotlib
+altair
+plotly
+python-dotenv

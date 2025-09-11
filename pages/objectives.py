@@ -1,8 +1,7 @@
 import streamlit as st
 from datetime import datetime
 import json
-import requests
-from api_client import get_json, API_BASE, API_KEY, API_VERSION
+from api_client import get_json, post_json
 from auth import user_has_access
 
 def render():
@@ -148,20 +147,13 @@ def render():
 
         if st.button("🚀 Create Objective", type="primary"):
             try:
-                response = requests.post(
-                    f"{API_BASE}/objectives",
-                    json=objective,
-                    headers={
-                        'apikey': API_KEY,
-                        'apiversion': API_VERSION,
-                        'Content-Type': 'application/json'
-                    }
-                )
-                if response.status_code == 201:
+                # Nutze post_json aus api_client.py
+                response = post_json('objectives', objective)
+                if response and response.get('id'):
                     st.success("✅ Objective created successfully!")
                     st.rerun()
                 else:
-                    st.error(f"❌ Failed to create objective: {response.text}")
+                    st.error(f"❌ Failed to create objective: {response}")
             except Exception as e:
                 st.error(f"❌ Error creating objective: {str(e)}")
 
@@ -199,18 +191,12 @@ def render():
                 with col2:
                     if st.button("🗑️ Delete Objective", type="secondary", disabled=not confirm_delete):
                         try:
-                            response = requests.delete(
-                                f"{API_BASE}/objectives/{objective_id}",
-                                headers={
-                                    'apikey': API_KEY,
-                                    'apiversion': API_VERSION
-                                }
-                            )
-                            if response.status_code == 200:
+                            response = post_json(f"objectives/{objective_id}", {})
+                            if response and response.get('success'):
                                 st.success("✅ Objective deleted successfully!")
                                 st.rerun()
                             else:
-                                st.error(f"❌ Failed to delete objective: {response.text}")
+                                st.error(f"❌ Failed to delete objective: {response}")
                         except Exception as e:
                             st.error(f"❌ Error deleting objective: {str(e)}")
         else:

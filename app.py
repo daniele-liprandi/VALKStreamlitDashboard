@@ -51,11 +51,14 @@ if "user" not in st.session_state:
         st.title("Login")
         user = st.text_input("Username")
         pw = st.text_input("Password", type="password")
+        api_key = st.text_input("API-Key", type="password")
         submitted = st.form_submit_button("Login")
         if submitted:
-            result = verify_user(user, pw)
+            result = verify_user(user, pw, api_key)
             if result:
                 st.session_state.user = result
+                st.session_state.api_key = api_key
+                st.session_state.tenant_name = result.get("tenant_name", "")
                 st.rerun()
             else:
                 st.error("Invalid username or password.")
@@ -65,7 +68,17 @@ if "user" not in st.session_state:
 with st.sidebar:
     st.image("assets/VALT_logo.jpg", width=210)
     st.markdown('<div class="sidebar-logo-separator"></div>', unsafe_allow_html=True)
-    st.success(f"Logged in as: {st.session_state.user['username']}")
+    # Benutzername und Tenant anzeigen
+    username = st.session_state.user.get('username', 'Unbekannt')
+    tenant = st.session_state.user.get('tenant_name', 'Kein Tenant')
+    st.success(f"User: {username}")
+    st.success(f"Tenant: {tenant}")
+    # Logout-Button
+    if st.button("Logout"):
+        st.session_state.pop("user", None)
+        st.session_state.pop("api_key", None)
+        st.session_state.pop("tenant_name", None)
+        st.rerun()
     page = st.radio(
         "📂 Menu",
         [
@@ -76,7 +89,8 @@ with st.sidebar:
             "🎯 Objectives",
             "🆕 Recruits",
             "🪙 Redeem Vouchers",
-            "⚔️ CZ Summary"
+            "⚔️ CZ Summary",
+            "📑 24h System Report"
         ],
         index=3
     )
@@ -106,3 +120,6 @@ elif page == "🪙 Redeem Vouchers":
 elif page == "⚔️ CZ Summary":
     from pages import cz_summary
     cz_summary.main()
+elif page == "📑 24h System Report":
+    from pages import fsdjump_factions_report
+    fsdjump_factions_report.render()
