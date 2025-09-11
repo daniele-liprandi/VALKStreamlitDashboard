@@ -72,10 +72,18 @@ def render():
                     ts = ts.dt.tz_convert('UTC')
                 if from_date:
                     from_dt = pd.to_datetime(from_date).tz_localize('UTC')
-                    df = df[ts >= from_dt]
+                    mask = ts >= from_dt
+                    df = df.loc[mask]
                 if to_date:
                     to_dt = pd.to_datetime(to_date).tz_localize('UTC')
-                    df = df[ts <= to_dt]
+                    # Recalculate ts after potential filtering
+                    ts = pd.to_datetime(df['timestamp'], errors='coerce')
+                    if ts.dt.tz is None:
+                        ts = ts.dt.tz_localize('UTC')
+                    else:
+                        ts = ts.dt.tz_convert('UTC')
+                    mask = ts <= to_dt
+                    df = df.loc[mask]
 
     # Index zurücksetzen, damit Anzeige und Auswahl übereinstimmen
     df = df.reset_index(drop=True)

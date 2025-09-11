@@ -71,10 +71,10 @@ with st.sidebar:
     menu_items = [
         "📊 Table Viewer",
         "📈 Evaluations", 
+        "🌌 Systems",
         "🧑 Cmdrs",
         "🏆 Leaderboard",
         "🎯 Objectives",
-        "🆕 Recruits",
         "🪙 Redeem Vouchers",
         "⚔️ CZ Summary"
     ]
@@ -96,6 +96,9 @@ if page == "📊 Table Viewer":
 elif page == "📈 Evaluations":
     from pages import evaluations
     evaluations.render()
+elif page == "🌌 Systems":
+    from pages import systems
+    systems.render()
 elif page == "🧑 Cmdrs":
     from pages import cmdrs
     cmdrs.render()
