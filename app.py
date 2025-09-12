@@ -90,7 +90,8 @@ with st.sidebar:
             "🆕 Recruits",
             "🪙 Redeem Vouchers",
             "⚔️ CZ Summary",
-            "📑 24h System Report"
+            "📑 24h System Report",
+            "🛰️ System Info (EDDN)"
         ],
         index=3
     )
@@ -123,3 +124,6 @@ elif page == "⚔️ CZ Summary":
 elif page == "📑 24h System Report":
     from pages import fsdjump_factions_report
     fsdjump_factions_report.render()
+elif page == "🛰️ System Info (EDDN)":
+    from pages import system_info
+    system_info.render()
