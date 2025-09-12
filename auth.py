@@ -5,10 +5,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 API_BASE = os.getenv("API_BASE")
+API_KEY = os.getenv("API_KEY")
 
 def verify_user(username, password):
     try:
-        r = requests.post(f"{API_BASE}/login", json={"username": username, "password": password})
+        headers = {"apikey": API_KEY}
+        r = requests.post(f"{API_BASE}/login", json={"username": username, "password": password}, headers=headers)
         if r.status_code == 200:
             return r.json()
         else:

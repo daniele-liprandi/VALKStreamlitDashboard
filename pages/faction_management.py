@@ -1,6 +1,8 @@
 import streamlit as st
-import api_client
+import pandas as pd
 from datetime import datetime
+import api_client
+from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode, DataReturnMode
 
 def render():
     st.title("🏛️ Faction Management")
@@ -79,88 +81,96 @@ def render():
         if not factions:
             st.warning("No factions configured.")
             return
+
+        # Convert factions to DataFrame for table display
+        faction_data = []
+        for faction_name, config in factions.items():
+            faction_data.append({
+                "Faction Name": faction_name,
+                "Description": config.get("description", "No description"),
+                "Webhook": config.get("webhook_url", "bgs"),
+                "Protected": "🔒 Yes" if config.get("protected", False) else "❌ No",
+                "Status": "🛡️ Protected" if config.get("protected", False) else "⚙️ Custom"
+            })
         
-        # Group factions by protection status
-        protected_factions = {k: v for k, v in factions.items() if v.get("protected", False)}
-        custom_factions = {k: v for k, v in factions.items() if not v.get("protected", False)}
+        df_factions = pd.DataFrame(faction_data)
         
-        # Protected factions section
-        if protected_factions:
-            st.markdown("**🛡️ Protected Factions** *(Cannot be modified or deleted)*")
+        if not df_factions.empty:
+            # Configure the AgGrid table
+            gb = GridOptionsBuilder.from_dataframe(df_factions)
+            gb.configure_default_column(
+                filter=True,
+                sortable=True,
+                resizable=True
+            )
+            gb.configure_selection("single", use_checkbox=False)
+            gb.configure_column("Faction Name", width=200, pinned="left")
+            gb.configure_column("Description", width=300)
+            gb.configure_column("Webhook", width=100)
+            gb.configure_column("Protected", width=100)
+            gb.configure_column("Status", width=120)
             
-            for faction_name, config in protected_factions.items():
-                with st.container():
-                    col1, col2, col3 = st.columns([3, 4, 1])
+            grid_options = gb.build()
+            
+            grid_response = AgGrid(
+                df_factions,
+                gridOptions=grid_options,
+                update_mode=GridUpdateMode.SELECTION_CHANGED,
+                data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
+                allow_unsafe_jscode=True,
+                height=min(400, 50 + 35 * len(df_factions))
+            )
+            
+            # Handle faction actions for selected row
+            selected_rows = grid_response.get("selected_rows", [])
+            if selected_rows is not None and len(selected_rows) > 0:
+                # Convert to list if it's a DataFrame
+                if hasattr(selected_rows, 'to_dict'):
+                    selected_faction = selected_rows.iloc[0].to_dict()
+                elif isinstance(selected_rows, list):
+                    selected_faction = selected_rows[0]
+                else:
+                    selected_faction = selected_rows
+                
+                faction_name = selected_faction["Faction Name"]
+                is_protected = "🔒 Yes" in selected_faction["Protected"]
+                
+                st.subheader(f"🔧 Actions for: {faction_name}")
+                
+                if is_protected:
+                    st.warning("🔒 This is a protected faction and cannot be modified or deleted.")
+                else:
+                    col1, col2 = st.columns(2)
                     
                     with col1:
-                        st.markdown(f"**{faction_name}**")
-                    
-                    with col2:
-                        st.markdown(f"*{config.get('description', 'No description')}*")
-                    
-                    with col3:
-                        st.markdown("🔒 Protected")
-            
-            st.divider()
-        
-        # Custom factions section
-        if custom_factions:
-            st.markdown("**⚙️ Custom Factions** *(Can be modified or deleted)*")
-            
-            for faction_name, config in custom_factions.items():
-                with st.container():
-                    col1, col2, col3, col4 = st.columns([2, 3, 1, 1])
-                    
-                    with col1:
-                        st.markdown(f"**{faction_name}**")
-                    
-                    with col2:
-                        # Editable description
-                        description_key = f"desc_{faction_name}"
-                        if description_key not in st.session_state:
-                            st.session_state[description_key] = config.get('description', '')
-                        
-                        new_description = st.text_input(
-                            "Description",
-                            value=st.session_state[description_key],
-                            key=f"input_{description_key}",
-                            label_visibility="collapsed"
+                        # Update description
+                        st.markdown("**📝 Update Description**")
+                        new_desc = st.text_input(
+                            "New Description",
+                            value=selected_faction["Description"],
+                            key=f"update_desc_{faction_name}"
                         )
-                        
-                        if new_description != st.session_state[description_key]:
-                            st.session_state[description_key] = new_description
-                    
-                    with col3:
-                        # Update button
-                        if st.button("💾", key=f"update_{faction_name}", help="Update description"):
+                        if st.button("💾 Update Description", key=f"update_btn_{faction_name}"):
                             try:
-                                api_client.update_faction(faction_name, st.session_state[description_key])
-                                st.success("Updated!")
+                                api_client.update_faction(faction_name, new_desc)
+                                st.success("✅ Description updated successfully!")
                                 st.rerun()
                             except Exception as e:
-                                st.error(f"Error: {str(e)}")
+                                st.error(f"❌ Error updating description: {str(e)}")
                     
-                    with col4:
-                        # Delete button
-                        if st.button("🗑️", key=f"delete_{faction_name}", help="Delete faction"):
-                            if st.session_state.get(f"confirm_delete_{faction_name}"):
-                                try:
-                                    api_client.delete_faction(faction_name)
-                                    st.success(f"Deleted {faction_name}")
-                                    # Clean up session state
-                                    if description_key in st.session_state:
-                                        del st.session_state[description_key]
-                                    if f"confirm_delete_{faction_name}" in st.session_state:
-                                        del st.session_state[f"confirm_delete_{faction_name}"]
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"Error: {str(e)}")
-                            else:
-                                st.session_state[f"confirm_delete_{faction_name}"] = True
-                                st.warning("Click delete again to confirm!")
+                    with col2:
+                        # Delete faction
+                        st.markdown("**🗑️ Delete Faction**")
+                        st.warning("⚠️ This action cannot be undone!")
+                        if st.button(f"🗑️ Delete {faction_name}", key=f"delete_btn_{faction_name}", type="secondary"):
+                            try:
+                                api_client.delete_faction(faction_name)
+                                st.success(f"✅ Faction '{faction_name}' deleted successfully!")
                                 st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ Error deleting faction: {str(e)}")
         else:
-            st.info("No custom factions configured. Add one above to get started!")
+            st.info("No factions configured. Add one above to get started!")
         
         # Discord Controls Section
         st.divider()
@@ -248,13 +258,13 @@ def render():
                 if custom_message.strip():
                     try:
                         api_client.post_json("discord/trigger/custom-message", {
-                            "content": custom_message.strip(),
-                            "webhook": webhook_choice,
+                            "message": custom_message.strip(),
+                            "webhook_type": webhook_choice,
                             "username": username
                         })
                         st.success(f"✅ Message sent to {webhook_choice} channel!")
                     except Exception as e:
-                        st.error(f"❌ Error sending message: {str(e)}")
+                        st.error(f"❌ Error: {str(e)}")
                 else:
                     st.error("❌ Message content cannot be empty!")
         
@@ -288,82 +298,107 @@ def render():
         
         st.divider()
         
-        # Help section
-        st.subheader("ℹ️ Help")
+        # Help section as expandable cards
+        st.subheader("ℹ️ Help & Documentation")
         
-        with st.expander("How does faction management work?"):
-            st.markdown("""
-            **Protected Factions:**
-            - `Communism Interstellar` and `People's Party of Heverty` are hardcoded
-            - These cannot be modified or deleted
-            - They use the configured BGS webhook
-            
-            **Custom Factions:**
-            - You can add any faction name here
-            - All custom factions use the default BGS webhook
-            - You can update descriptions and delete custom factions
-            - Changes take effect immediately for the conflict monitoring scheduler
-            
-            **Conflict Monitoring:**
-            - The system checks for conflicts every 6 hours (00:00, 06:00, 12:00, 18:00 UTC)
-            - When conflicts are found, notifications are sent to the appropriate Discord webhook
-            - All custom factions use the same default BGS webhook
-            """)
+        # Create tabs for different help sections
+        help_tab1, help_tab2, help_tab3, help_tab4 = st.tabs([
+            "🏛️ Faction Management", "📢 Discord Controls", "⚡ Quick Actions", "🔧 Troubleshooting"
+        ])
         
-        with st.expander("Discord Controls Guide"):
+        with help_tab1:
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("**🛡️ Protected Factions:**")
+                st.markdown("""
+                - Hardcoded in tenant configuration
+                - Cannot be modified or deleted
+                - Use configured BGS webhook
+                - Example: `Communism Interstellar`, `People's Party of Heverty`
+                """)
+                
+            with col2:
+                st.markdown("**⚙️ Custom Factions:**")
+                st.markdown("""
+                - Added through dashboard
+                - Can be modified and deleted
+                - Use default BGS webhook
+                - Take effect immediately for monitoring
+                """)
+            
+            st.markdown("**📊 Faction Table Features:**")
             st.markdown("""
-            **Daily Summary:**
-            - Sends a comprehensive report of yesterday's activities
-            - Includes market events, missions, influence, bounties, exploration, etc.
-            - Goes to the Shoutout Discord channel
-            
-            **Space/Ground CZ Summaries:**
-            - Sends conflict zone statistics for the selected time period
-            - Shows system-by-system breakdown and commander participation
-            - Useful for tracking combat activities
-            
-            **Custom Messages:**
-            - Send any message to Discord channels
-            - Choose between Shoutout (general) or BGS (faction-specific) channels
-            - Your username will be included as the sender
-            
-            **Quick Actions:**
-            - **Faction Conflicts:** Manually check all configured factions for conflicts
-            - **Sync Commanders:** Update commander data from INARA
-            - **All Top 5:** Send leaderboards for all categories at once
-            
-            **Time Periods:**
-            - `ld` = Last Day (yesterday)
-            - `lw` = Last Week (previous 7 days)
-            - `cm` = Current Month
-            - `lm` = Last Month
-            - `2m` = Last 2 Months
-            - `y` = Year to Date
-            - `all` = All Time
+            - **Filter:** Use column headers to filter by any field
+            - **Sort:** Click column headers to sort
+            - **Select:** Click on any row to perform actions
+            - **Resize:** Drag column borders to adjust width
             """)
         
-        with st.expander("Troubleshooting"):
-            st.markdown("""
-            **Common Issues:**
-            - **Faction name not recognized:** Make sure you use the exact faction name as it appears in Elite Dangerous
-            - **No conflicts detected:** The faction might not be in any conflicts, or the name might be misspelled
-            - **Webhook not working:** Check that the Discord webhook URL is properly configured in the server environment
-            - **Discord message failed:** Check your internet connection and try again
-            - **Empty summaries:** No data available for the selected time period
-            """)
+        with help_tab2:
+            # Create a summary table of Discord controls
+            discord_data = [
+                {"Control", "Description", "Channel", "Period Options"},
+                {"📈 Daily Summary", "Yesterday's activity report", "Shoutout", "Fixed (yesterday)"},
+                {"🚀 Space CZ", "Space conflict zone stats", "BGS", "Configurable"},
+                {"🔫 Ground CZ", "Ground conflict zone stats", "BGS", "Configurable"},
+                {"💬 Custom Message", "Send any message", "Selectable", "N/A"}
+            ]
             
-        with st.expander("Discord Channel Information"):
-            st.markdown("""
-            **Available Webhooks:**
-            - **📢 Shoutout Channel:** General announcements, daily summaries, CZ reports
-            - **🛡️ BGS Channel:** Faction conflicts, tick notifications, strategic updates
+            discord_df = pd.DataFrame(discord_data[1:], columns=discord_data[0])
+            st.dataframe(discord_df, use_container_width=True, hide_index=True)
             
-            **Message Types:**
-            - Daily summaries are automatically formatted with leaderboards
-            - CZ summaries include detailed statistics by system and commander
-            - Custom messages appear with your username and timestamp
-            - All messages respect Discord's formatting (Markdown support)
-            """)
+            st.markdown("**Period Options:**")
+            period_data = [
+                {"Code", "Description"},
+                {"ld", "Last Day (yesterday)"},
+                {"lw", "Last Week (7 days)"},
+                {"cm", "Current Month"},
+                {"lm", "Last Month"},
+                {"2m", "Last 2 Months"},
+                {"y", "Year to Date"},
+                {"all", "All Time"}
+            ]
+            
+            period_df = pd.DataFrame(period_data[1:], columns=period_data[0])
+            st.dataframe(period_df, use_container_width=True, hide_index=True)
+        
+        with help_tab3:
+            # Quick actions table
+            actions_data = [
+                {"Action", "Description", "Effect"},
+                {"🔄 Faction Conflicts", "Check all factions for conflicts", "Immediate Discord notifications"},
+                {"👥 Sync Commanders", "Update commander data from INARA", "Refresh squadron ranks"},
+                {"📊 All Top 5", "Send leaderboards for all categories", "Multiple Discord messages"}
+            ]
+            
+            actions_df = pd.DataFrame(actions_data[1:], columns=actions_data[0])
+            st.dataframe(actions_df, use_container_width=True, hide_index=True)
+        
+        with help_tab4:
+            st.markdown("**Common Issues & Solutions:**")
+            
+            issues_data = [
+                {"Issue", "Possible Cause", "Solution"},
+                {"Faction not recognized", "Incorrect name", "Use exact Elite Dangerous faction name"},
+                {"No conflicts detected", "No active conflicts", "Check spelling or wait for conflicts"},
+                {"Webhook failed", "Invalid webhook URL", "Check server webhook configuration"},
+                {"Discord message failed", "Network issue", "Check connection and retry"},
+                {"Empty summaries", "No data for period", "Select different time period"}
+            ]
+            
+            issues_df = pd.DataFrame(issues_data[1:], columns=issues_data[0])
+            st.dataframe(issues_df, use_container_width=True, hide_index=True)
+            
+            st.markdown("**Discord Webhook Channels:**")
+            webhook_data = [
+                {"Channel", "Purpose", "Message Types"},
+                {"📢 Shoutout", "General announcements", "Daily summaries, CZ reports, custom messages"},
+                {"🛡️ BGS", "Faction operations", "Conflict notifications, tick alerts, strategic updates"}
+            ]
+            
+            webhook_df = pd.DataFrame(webhook_data[1:], columns=webhook_data[0])
+            st.dataframe(webhook_df, use_container_width=True, hide_index=True)
             
     except Exception as e:
         st.error(f"❌ Error loading faction data: {str(e)}")

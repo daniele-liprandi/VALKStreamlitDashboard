@@ -6,6 +6,20 @@ from auth import user_has_access
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 import json
 
+def format_conflict_status(conflict_status, conflict_details):
+    """Format conflict status for display with appropriate emoji"""
+    if not conflict_status:
+        return "❓ No Data"
+    
+    if conflict_status == "peaceful":
+        return "✅ Peaceful"
+    elif conflict_status == "unknown":
+        return "❓ Unknown"
+    elif conflict_status in ["war", "civil_war", "election", "multiple"]:
+        return f"⚔️ {conflict_details}" if conflict_details else f"⚔️ {conflict_status.replace('_', ' ').title()}"
+    else:
+        return "❓ Unknown"
+
 def render():
     if not user_has_access(st.session_state.user, '3_Systems'):
         st.error('Unauthorized')
@@ -31,10 +45,15 @@ def render():
         systems_df["Controlling Faction"] = systems_df["controlling_faction"].fillna("Unknown")
         systems_df["Active CMDRs"] = systems_df["active_cmdrs"]
         systems_df["Has EDSM Data"] = systems_df["has_edsm_data"].map({True: "✅", False: "❌"})
-
+        
+        # Add conflict status from API response (now pre-calculated)
+        systems_df["Conflict Status"] = systems_df.apply(
+            lambda row: format_conflict_status(row.get("conflict_status"), row.get("conflict_details")), 
+            axis=1
+        )
         
         # Select columns for display
-        display_df = systems_df[["System", "Controlling Faction", "Active CMDRs", "Has EDSM Data"]].copy()
+        display_df = systems_df[["System", "Controlling Faction", "Active CMDRs", "Has EDSM Data", "Conflict Status"]].copy()
         display_df.insert(0, "No.", range(1, len(display_df) + 1))
         
         # Configure grid for system selection
@@ -48,6 +67,7 @@ def render():
         gb.configure_column("Controlling Faction", width=200)
         gb.configure_column("Active CMDRs", width=120, type=["numericColumn"])
         gb.configure_column("Has EDSM Data", width=120)
+        gb.configure_column("Conflict Status", width=150)
         
         grid_options = gb.build()
         
