@@ -175,7 +175,6 @@ def render():
         # Discord Controls Section
         st.divider()
         st.subheader("📢 Discord Controls")
-        st.info("🔧 Admin-only: Trigger Discord notifications manually")
         
         # Discord trigger buttons in columns
         col1, col2, col3 = st.columns(3)
@@ -193,8 +192,9 @@ def render():
             st.markdown("**⚔️ Space CZ Summary**")
             period_space = st.selectbox(
                 "Period",
-                options=["ld", "lw", "cm", "lm", "2m", "y", "all"],
+                options=["cd", "ld", "lw", "cm", "lm", "2m", "y", "all"],
                 format_func=lambda x: {
+                    "cd": "Current Day",
                     "ld": "Last Day", "lw": "Last Week", "cm": "Current Month",
                     "lm": "Last Month", "2m": "Last 2 Months", "y": "Year", "all": "All Time"
                 }[x],
@@ -211,8 +211,9 @@ def render():
             st.markdown("**🏃 Ground CZ Summary**")
             period_ground = st.selectbox(
                 "Period",
-                options=["ld", "lw", "cm", "lm", "2m", "y", "all"],
+                options=["cd", "ld", "lw", "cm", "lm", "2m", "y", "all"],
                 format_func=lambda x: {
+                    "cd": "Current Day",
                     "ld": "Last Day", "lw": "Last Week", "cm": "Current Month",
                     "lm": "Last Month", "2m": "Last 2 Months", "y": "Year", "all": "All Time"
                 }[x],
