@@ -2,24 +2,7 @@ import streamlit as st
 import pandas as pd
 from api_client import get_json
 
-# State color mapping (like Inara)
-STATE_COLORS = {
-    "War": "#e74c3c",
-    "CivilWar": "#e74c3c",
-    "Election": "#e67e22",
-    "Elections": "#e67e22",
-    "Expansion": "#3498db",
-    "Boom": "#2980b9",
-    "Bust": "#f1c40f",
-    "CivilUnrest": "#f39c12",
-    "Famine": "#8e44ad",
-    "Outbreak": "#16a085",
-    "Retreat": "#7f8c8d",
-    "Investment": "#27ae60",
-    "Lockdown": "#c0392b",
-    "None": "#181c22",
-    "": "#181c22"
-}
+from _global import STATE_COLORS
 
 def color_state(val):
     color = STATE_COLORS.get(val, "#181c22")
