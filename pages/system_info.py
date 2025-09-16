@@ -31,6 +31,20 @@ STATE_COLORS = {
     "": "#181c22",
 }
 
+GOVERNMENT_COLORS = {
+    "Anarchy": "#e74c3c",
+    "Dictatorship": "#e67e22",
+    "Feudal": "#3498db",
+    "Patronage": "#2980b9",
+    "Democracy": "#f1c40f",
+    "Communism": "#f39c12",
+    "Confederacy": "#d35400",
+    "Cooperative": "#8e44ad",
+    "Corporate": "#16a085",
+    "Prison Colony": "#7f8c8d",
+    "Theocracy": "#9b59b6",
+}
+
 STATE_ICONS = {
     "War": "⚔️",
     "CivilWar": "⚔️",
@@ -338,7 +352,7 @@ def inject_aligned_rows_css(col_px: int = 260, chk_px: int = 180, gap_rem: float
       }}
       label {{ margin-bottom: .18rem !important; }}
 
-      /* Responsive grid templates - stack on small screens */
+      /* Responsive grid - stack for mobile */
       @media (max-width: 1200px) {{
         #sys-row + div[data-testid="stHorizontalBlock"],
         #fac-row + div[data-testid="stHorizontalBlock"],
@@ -355,7 +369,7 @@ def inject_aligned_rows_css(col_px: int = 260, chk_px: int = 180, gap_rem: float
         }}
       }}
 
-      /* Wide screen grid layout */
+      /* Wide screen */
       @media (min-width: 1201px) {{
         #sys-row + div[data-testid="stHorizontalBlock"],
         #fac-row + div[data-testid="stHorizontalBlock"],
@@ -860,10 +874,12 @@ def render():
             sys_c1, sys_c2, sys_c3 = st.columns(3)
 
             with sys_c1:
+                # Allow clearing selection by adding an explicit "Clear" option
+                system_name_options_with_clear = [""] + [opt for opt in system_name_options if opt]
                 system_name = st.selectbox(
                     "System Name",
-                    system_name_options,
-                    index=sel_index,
+                    system_name_options_with_clear,
+                    index=system_name_options_with_clear.index(current_sel) if current_sel in system_name_options_with_clear else 0,
                     key="system_name_filter"
                 )
             with sys_c2:
@@ -905,7 +921,7 @@ def render():
         with st.expander("Faction", expanded=False):
             st.markdown('<span id="fac-row"></span>', unsafe_allow_html=True)
             # First row: 3 main filters
-            fac_c1, fac_c2, fac_c3 = st.columns(3)
+            fac_c1, fac_c2, fac_c3, fac_c7 = st.columns(4)
             # Second row: 2 more filters + checkbox
             fac_c4, fac_c5, fac_c6 = st.columns(3)
 
@@ -924,6 +940,10 @@ def render():
 
             with fac_c3:
                 state = st.selectbox("State", [""] + list(STATE_COLORS.keys()), key="state_filter")
+
+            with fac_c7:
+                government = st.selectbox("Government", [""] + list(GOVERNMENT_COLORS.keys()),
+                                          key="government_filter")
 
             with fac_c4:
                 pending_state = st.selectbox("Pending State", [""] + list(STATE_COLORS.keys()),
@@ -975,6 +995,7 @@ def render():
         if power: params["power"] = power
         if powerplay_state: params["powerplay_state"] = powerplay_state
         if state: params["state"] = state
+        if government: params["government"] = government
         if pending_state: params["pending_state"] = pending_state
         if recovering_state: params["recovering_state"] = recovering_state
         if has_conflict: params["has_conflict"] = "true"
