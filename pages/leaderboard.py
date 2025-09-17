@@ -13,6 +13,7 @@ def render():
     st.title("🏆 Leaderboard")
 
     period_labels = {
+        "ct": "Current Tick (since last BGS tick)",
         "cd": "Current Day (today)",
         "ld": "Last Day (yesterday)",
         "cw": "Current Week",
@@ -33,8 +34,7 @@ def render():
             return
 
         df = pd.DataFrame(data)
-        df.fillna(0, inplace=True)
-        df = df.infer_objects(copy=False)
+        df = df.fillna(0).infer_objects(copy=False)
 
         rename_map = {
             "cmdr": "Cmdr.",

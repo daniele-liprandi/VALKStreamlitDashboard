@@ -6,18 +6,15 @@ import streamlit as st
 load_dotenv()
 
 API_BASE = os.getenv("API_BASE")
+API_KEY = os.getenv("API_KEY")
 
-def get_api_key(api_key=None):
+def get_api_key():
     # Verwende explizit übergebenen API-Key oder den aus der Session
-    if api_key:
-        return api_key
-    if hasattr(st, "session_state") and "api_key" in st.session_state and st.session_state.api_key:
-        return st.session_state.api_key
-    return None
+    return API_KEY
 
 def verify_user(username, password, api_key=None):
     headers = {}
-    key = get_api_key(api_key)
+    key = get_api_key()
     if key:
         headers["apikey"] = key
     try:

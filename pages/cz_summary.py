@@ -37,6 +37,7 @@ def main():
     st.title("⚔️ CZ Summary")
 
     period_labels = {
+        "ct": "Current Tick (since last BGS tick)",
         "cd": "Current Day (today)",
         "ld": "Last Day (yesterday)",
         "cw": "Current Week",

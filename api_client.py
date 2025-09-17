@@ -7,14 +7,11 @@ load_dotenv()
 
 API_BASE = os.getenv("API_BASE")
 API_VERSION = os.getenv("API_VERSION")
+API_KEY = os.getenv("API_KEY")
 
 def get_api_key():
     # Nur API-Key aus Session zulassen, sonst Fehler anzeigen
-    if hasattr(st, "session_state") and "api_key" in st.session_state and st.session_state.api_key:
-        return st.session_state.api_key
-    st.error("Kein API-Key in der Sitzung gefunden. Bitte loggen Sie sich erneut ein und geben Sie einen API-Key an.")
-    raise RuntimeError("API-Key fehlt in der Session.")
-
+    return API_KEY
 
 def get_json(path, params=None):
     url = f"{API_BASE}/{path}"

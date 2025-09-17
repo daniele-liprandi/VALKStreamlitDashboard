@@ -142,6 +142,8 @@ def humanize_constant(val: str, kind: str) -> str:
     if not val:
         return "-"
     if kind == "gov":
+        print(f"DEBUG - Incoming gov value: '{val}'")  # Debug print
+        print(f"DEBUG - Is in GOV_OVERRIDES: {val in GOV_OVERRIDES}")  # Debug check
         if val in GOV_OVERRIDES:
             return GOV_OVERRIDES[val]
     if kind == "sec":
@@ -757,7 +759,9 @@ def get_list_from_api(endpoint, label="name"):
             elif all(isinstance(x, dict) and label in x for x in data):
                 return sorted([x[label] for x in data])
         return []
-    except Exception:
+    except Exception as e:
+        # Debug: Show error information in Streamlit
+        st.error(f"Error loading {endpoint}: {str(e)}")
         return []
 
 def render():
@@ -979,13 +983,13 @@ def render():
     system_name = st.session_state.system_name_snapshot
     params = st.session_state.params_snapshot
 
-    # <<< NEU: jetzt erst leeren Suchfall abfangen >>>
+    # <<< NEW: now catch empty search case first >>>
     if not system_name and not {k: v for k, v in params.items() if v not in ("", None)}:
-        st.warning("Bitte gib einen Systemnamen oder mindestens einen Filter an.")
+        st.warning("Please enter a system name or at least one filter.")
         return
     st.markdown(f"Results for System: **{system_name or '*'}'** with Filters: `{params}`")
 
-    # --- Daten holen (nur /system-summary; 400-Body sicher auswerten) ---
+    # --- Fetch data (only /system-summary; safely parse 400-body) ---
     try:
         path = f"system-summary/{quote(system_name, safe='')}" if system_name else "system-summary"
         data = get_json(path, params=params)
@@ -1038,6 +1042,10 @@ def render():
             if not factions:
                 st.info("No minor factions found.")
             else:
+                # Print first faction name, allegiance, government and state for debug
+                st.write(f"First faction: {factions[0]}")
+                
+
                 df = pd.DataFrame([
                     {
                         "Name": f.get("name", ""),

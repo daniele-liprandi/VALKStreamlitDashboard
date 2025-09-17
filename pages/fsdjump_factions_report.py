@@ -50,7 +50,7 @@ def render():
     """, unsafe_allow_html=True)
 
     try:
-        data = get_json("/fsdjump-factions")
+        data = get_json("fsdjump-factions")
     except Exception as e:
         st.error(f"Error loading data: {e}")
         return
