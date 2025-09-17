@@ -170,9 +170,9 @@ def render():
 
         styled = (
             df.style
-              .applymap(color_state, subset=["State"])
-              .applymap(color_states_cell, subset=["Pending"])
-              .applymap(color_states_cell, subset=["Recovering"])
+              .map(color_state, subset=["State"])
+              .map(color_states_cell, subset=["Pending"])
+              .map(color_states_cell, subset=["Recovering"])
               .format({"Influence": fmt_pct})
               .set_properties(subset=["Influence"], **{
                   "text-align": "right",
