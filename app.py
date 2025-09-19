@@ -159,7 +159,8 @@ with st.sidebar:
             "🪙 Redeem Vouchers",
             "⚔️ CZ Summary",
             "📑 24h System Report",
-            "🛰️ System Info (EDDN)"
+            "🛰️ System Info (EDDN)",
+            "🤖 Discord Management"
         ],
         index=3
     )
@@ -192,3 +193,6 @@ elif page == "📑 24h System Report":
 elif page == "🛰️ System Info (EDDN)":
     from pages import system_info
     system_info.render()
+elif page == "🤖 Discord Management":
+    from pages import discord_management
+    discord_management.render()
