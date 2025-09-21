@@ -286,12 +286,12 @@ POP_PRESETS = {
     "Custom…": ("custom", "custom"),
 }
 
-def _fmt_us(n: int | None) -> str:
+def _fmt_us(n) -> str:
     if n is None:
         return "∞"
     return f"{n:,}"
 
-def build_population_param(pop_min: int | None, pop_max: int | None) -> str | None:
+def build_population_param(pop_min, pop_max) -> str:
     """
     Returns 'min-max' per API spec. Open upper bound -> 'min-'.
     Whole range -> None (do not include the parameter).
@@ -321,6 +321,36 @@ def _apply_reset_if_requested():
         st.session_state._do_reset = False
 
 # CSS für kompaktere Filter-UI
+def inject_three_col_rows_css(col_px: int = 200, gap_rem: float = .24):
+    st.markdown(f"""
+    <style>
+      :root {{
+        --valk-col: {col_px}px;
+        --valk-gap: {gap_rem}rem;
+      }}
+
+      /* kompakter: Widgets & Labels */
+      [data-testid="stExpander"] .streamlit-expanderContent [data-testid="stSelectbox"],
+      [data-testid="stExpander"] .streamlit-expanderContent [data-testid="stNumberInput"],
+      [data-testid="stExpander"] .streamlit-expanderContent [data-testid="stTextInput"] {{
+        margin-bottom: .24rem !important;
+      }}
+      label {{ margin-bottom: .16rem !important; }}
+
+      /* Jede markierte Zeile = 3 feste Spalten + flex Füller */
+      #sys-row    + div[data-testid="stHorizontalBlock"],
+      #fac-row-1  + div[data-testid="stHorizontalBlock"],
+      #fac-row-2  + div[data-testid="stHorizontalBlock"],
+      #pow-row    + div[data-testid="stHorizontalBlock"] {{
+        display: grid !important;
+        grid-template-columns: var(--valk-col) var(--valk-col) var(--valk-col) 1fr !important;
+        gap: var(--valk-gap) !important;
+        align-items: end !important;
+        justify-content: start !important;
+      }}
+    </style>
+    """, unsafe_allow_html=True)
+
 def inject_aligned_rows_css(col_px: int = 260, chk_px: int = 180, gap_rem: float = .28):
     st.markdown(f"""
     <style>
@@ -608,6 +638,171 @@ def render_header_chips(sysinfo: dict, pp0: dict, conflict_count: int = 0):
     html = chip_css() + '<div class="valk-badges">' + "".join([i for i in items if i]) + "</div>"
     st.markdown(html, unsafe_allow_html=True)
 
+# ============================
+# CMDR Events / Leaderboard
+# ============================
+SUMMARY_ENDPOINTS = [
+    ("Market Events",         "market-events"),
+    ("Missions Completed",    "missions-completed"),
+    ("Missions Failed",       "missions-failed"),
+    ("Bounty Vouchers",       "bounty-vouchers"),
+    ("Combat Bonds",          "combat-bonds"),
+    ("Exploration Sales",     "exploration-sales"),
+    ("Bounty Fines",          "bounty-fines"),
+    ("Influence by Faction",  "influence-by-faction"),
+    ("Influence EIC",         "influence-eic"),
+]
+
+def _alias_col(name: str) -> str:
+    """Robuste Alias-Erkennung für API-Spaltennamen (case/variante-insensitiv)."""
+    n = re.sub(r"[^a-z0-9]+", "_", str(name).lower()).strip("_")
+    if "cmdr" in n or "commander" in n: return "cmdr"
+    if "rank" in n: return "sq_rank"
+    if "faction" in n: return "faction"
+
+    # typische Value-Spalten
+    if "buy" in n: return "buy"
+    if "sell" in n: return "sell"
+    if "quantity" in n: return "total_quantity"
+    if "volume" in n: return "total_volume"
+    if "completed" in n: return "missions_completed"
+    if "failed" in n: return "missions_failed"
+    if "voucher" in n: return "bounty_vouchers"
+    if "bond" in n: return "combat_bonds"
+    if "sale" in n: return "exploration_sales"
+    if "fine" in n: return "bounty_fines"
+    if "influence" in n: return "influence"
+    if "credit" in n or n.endswith("_cr"): return "credits"
+    if n in ("total","sum","amount","value"): return n
+    return n  # fallback
+
+def _pretty_header(alias: str) -> str:
+    """Schöne, konsistente Spaltenüberschriften."""
+    mapping = {
+        "cmdr": "Cmdr.",
+        "sq_rank": "Sq.-Rank",
+        "faction": "Faction",
+        "buy": "Buy (Cr.)",
+        "sell": "Sell (Cr.)",
+        "total_quantity": "Total Quantity (tons)",
+        "total_volume": "Total Volume (Cr.)",
+        "missions_completed": "Missions completed",
+        "missions_failed": "Missions failed",
+        "bounty_vouchers": "Bounty Vouchers (Cr.)",
+        "combat_bonds": "Combat Bonds (Cr.)",
+        "exploration_sales": "Exploration Sales (Cr.)",
+        "bounty_fines": "Bounty Fines (Cr.)",
+        "credits": "Credits (Cr.)",
+        "influence": "Influence",
+        "total": "Total",
+        "sum": "Sum",
+        "amount": "Amount",
+        "value": "Value",
+    }
+    # Fallback: schöne Titelcase + Spaces
+    return mapping.get(alias, re.sub(r"_+", " ", alias).title())
+
+def _fmt_us_num(x):
+    if x is None or (isinstance(x, float) and pd.isna(x)): return ""
+    try:
+        v = float(x)
+        if abs(v - int(v)) < 1e-9:
+            return f"{int(v):,}"
+        return f"{v:,.2f}"
+    except Exception:
+        return str(x)
+
+def _normalize_activity_df(label: str, data) -> tuple[pd.DataFrame, list[str]]:
+    """
+    Baut einen DataFrame, normalisiert Spalten:
+    - Cmdr. zuerst, danach Sq.-Rank, dann optionale Textspalten (z. B. Faction), dann Value-Spalten
+    - Schöne Header, numerische Spalten erkannt
+    Gibt (df, numeric_cols) zurück.
+    """
+    df = pd.DataFrame(data)
+    if df.empty:
+        return df, []
+
+    # 1) Alias-Erkennung & Umbenennen → schöne Header
+    alias_map = {c: _alias_col(c) for c in df.columns}
+    pretty_map = {c: _pretty_header(alias_map[c]) for c in df.columns}
+    df = df.rename(columns=pretty_map)
+
+    # 2) Numerische Spalten bestimmen
+    #    (erst versuchen zu konvertieren, wo sinnvoll)
+    for c in df.columns:
+        if df[c].dtype == object:
+            try:
+                df[c] = pd.to_numeric(df[c].str.replace(",", ""), errors="ignore")
+            except Exception:
+                pass
+    numeric_cols = list(df.select_dtypes(include=["number"]).columns)
+
+    # 3) Order bestimmen:
+    #    Cmdr. → Sq.-Rank → optionale Textspalten (Faction, ...) → alle numerischen Werte
+    left = []
+    if "Cmdr." in df.columns: left.append("Cmdr.")
+    if "Sq.-Rank" in df.columns: left.append("Sq.-Rank")
+    # optionale Deskriptoren (außer Cmdr./Sq.-Rank), die NICHT numerisch sind
+    descr = [c for c in ["Faction"] if c in df.columns and c not in numeric_cols]
+    values = [c for c in df.columns if c not in left + descr]
+    # Value-Spalten: numerische zuerst, dann evtl. restliche
+    values_num = [c for c in values if c in numeric_cols]
+    values_rest = [c for c in values if c not in numeric_cols]
+    new_order = left + descr + values_num + values_rest
+    df = df[new_order]
+
+    # 4) Index „No.“ setzen
+    df = df.reset_index(drop=True)
+    df.index = df.index + 1
+    df.index.name = "No."
+
+    return df, values_num
+
+def fetch_all_cmdr_summaries(system_name: str, period: str) -> dict:
+    """
+    Ruft alle Summary-APIs lazy ab: /api/summary/<endpoint>?period=<ct|lt>&system_name=<name>
+    Gibt Dict[Label] -> Daten (Liste/Dict) zurück.
+    """
+    params = {"period": period, "system_name": system_name}
+    out = {}
+    for label, endpoint in SUMMARY_ENDPOINTS:
+        try:
+            out[label] = get_json(f"summary/{endpoint}", params=params) or []
+        except Exception as e:
+            out[label] = {"error": str(e)}
+    return out
+
+def render_cmdr_events_block(system_name: str, period: str, results: dict):
+    """
+    Zeigt die geladenen Summary-Daten in Tabs an – mit Cmdr.-first, schönen Headers,
+    rechtsbündigen en-US Zahlen & sinnvoller Sortierung.
+    """
+    with st.expander(f"👨‍🚀 CMDR Events — {system_name} [{period.upper()}]", expanded=True):
+        tabs = st.tabs([label for (label, _) in SUMMARY_ENDPOINTS])
+        for (label, _), tab in zip(SUMMARY_ENDPOINTS, tabs):
+            with tab:
+                data = results.get(label, [])
+                if isinstance(data, dict) and data.get("error"):
+                    st.error(f"{label}: {data['error']}")
+                    continue
+                df, num_cols = _normalize_activity_df(label, data)
+                if df.empty:
+                    st.info("No data.")
+                    continue
+
+                # sortiere nach erster Value-Spalte (numerisch), falls vorhanden
+                if num_cols:
+                    df = df.sort_values(num_cols[0], ascending=False)
+
+                # Styling: Zahlenspalten rechtsbündig + en-US format
+                fmt = {c: _fmt_us_num for c in num_cols}
+                styled = (
+                    df.style
+                      .format(fmt)
+                      .set_properties(subset=num_cols, **{"text-align": "right", "min-width": "110px"})
+                )
+                st.table(styled)
 
 # ============================
 # Conflicts-Mapping & Renderer
@@ -706,6 +901,209 @@ def render_conflicts_table(conflicts: list):
     )
     st.table(styled)
 
+# =============================
+# Minor Factions Table Renderer
+# =============================
+def render_minor_factions_table(factions: list) -> None:
+    """
+    Tabellendarstellung der Minor Factions – identisch zur Systemseite.
+    Erwartet die rohe Liste aus dem API-Response unter entry['factions'].
+    """
+    if not factions:
+        st.info("No minor factions found.")
+        return
+
+    df = pd.DataFrame([
+        {
+            "Name": f.get("name", ""),
+            "Allegiance": f.get("allegiance", ""),
+            "Government": humanize_constant(f.get("government", ""), "gov") if f.get("government") else "",
+            "State": "" if (f.get("state") in (None, "", "None")) else f.get("state"),
+            "Influence": f.get("influence", 0.0),
+            "Active States": ", ".join(to_state_list(f.get("active_states"))),
+            "Pending": ", ".join(to_state_list(f.get("pending_states"))),
+            "Recovering": ", ".join(to_state_list(f.get("recovering_states"))),
+        }
+        for f in factions if isinstance(f, dict)
+    ])
+
+    if df.empty:
+        st.info("No minor factions found.")
+        return
+
+    df = df.sort_values(by="Influence", ascending=False).reset_index(drop=True)
+    df.index = df.index + 1
+    df.index.name = "#"
+
+    styled = (
+        df.style
+          .applymap(style_state, subset=["State"])
+          .applymap(style_states_cell, subset=["Active States"])
+          .applymap(style_states_cell, subset=["Pending"])
+          .applymap(style_states_cell, subset=["Recovering"])
+          .format({
+              "Influence": fmt_pct,
+              "State": fmt_state_text,
+              "Active States": fmt_states_text,
+              "Pending": fmt_states_text,
+              "Recovering": fmt_states_text,
+          })
+          .set_properties(subset=["Influence"], **{"text-align": "right", "min-width": "90px", "max-width": "90px"})
+          .set_properties(subset=["Name"], **{"min-width": "200px", "max-width": "200px"})
+          .set_properties(subset=["Allegiance"], **{"min-width": "100px", "max-width": "100px"})
+          .set_properties(subset=["Government"], **{"min-width": "120px", "max-width": "120px"})
+          .set_properties(subset=["State"], **{"text-align": "center", "min-width": "140px", "max-width": "160px"})
+          .set_properties(subset=["Active States", "Pending", "Recovering"], **{"min-width": "180px", "max-width": "220px"})
+    )
+    st.table(styled)
+
+# ================================
+# System Activities Table Renderer
+# ================================
+def fetch_system_activities(system_name: str, period: str):
+    params = {"system": system_name, "period": period}  # ct|lt|tickid
+    data = get_json("activities/system-summary", params=params) or []
+    # Server kann einzelnes Objekt liefern → Liste herstellen
+    if isinstance(data, dict):
+        data = [data]
+    # nur Sicherheitshalber: auf das angefragte System filtern
+    if system_name:
+        data = [r for r in data if (r.get("system") or "").lower() == system_name.lower()]
+    return data
+
+def _fmt_en_num(x):
+    try:
+        v = float(x)
+        return f"{v:,.0f}" if abs(v - int(v)) < 1e-9 else f"{v:,.2f}"
+    except Exception:
+        return x
+
+def render_system_activities_table(rows: list):
+    if not rows:
+        st.info("No data.")
+        return
+
+    rows = sorted(rows, key=lambda r: str(r.get("tickid", "")), reverse=True)
+    r = rows[0]
+
+    # System NICHT als Spalte, sondern als Index; KEINE Tick/tickid-Spalte mehr
+    table_row = {
+        "System": r.get("system", "-"),
+        # INF
+        "INF Pri": r.get("total_inf_primary", 0),
+        "INF Sec": r.get("total_inf_secondary", 0),
+        # TRADE (Buy / Sell)
+        "Buy Items":  r.get("buy_items_total", 0),
+        "Buy Value":  r.get("buy_value_total", 0),
+        "Sell Items": r.get("sell_items_total", 0),
+        "Sell Value": r.get("sell_value_total", 0),
+        "Profit":     r.get("sell_profit_total", 0),
+        # BM / BVs / Exploration / CBs / Fails
+        "BM":     r.get("total_trade_bm", 0),
+        "BVs":    r.get("total_bvs", 0),
+        "Expl":   r.get("total_exploration", 0),
+        "CBs":    r.get("total_cbs", 0),
+        "Fails":  r.get("total_mission_fails", 0),
+        # Murders / S&R
+        "Murders (Ground)": r.get("total_murders_ground", 0),
+        "Murders (Ship)":   r.get("total_murders_ship", 0),
+        "S&R":              r.get("total_sandr", 0),
+        # CZs Space/Ground
+        "SpaceCZ L": r.get("cz_space_L", 0),
+        "SpaceCZ M": r.get("cz_space_M", 0),
+        "SpaceCZ H": r.get("cz_space_H", 0),
+        "GroundCZ L": r.get("cz_ground_L", 0),
+        "GroundCZ M": r.get("cz_ground_M", 0),
+        "GroundCZ H": r.get("cz_ground_H", 0),
+    }
+
+    df = pd.DataFrame([table_row]).set_index("System")
+
+    num_cols = list(df.columns)
+    styled = (
+        df.style
+          .format({c: _fmt_en_num for c in num_cols})
+          .set_properties(subset=num_cols, **{"text-align": "right", "min-width": "90px"})
+    )
+    st.table(styled)
+
+# =================================
+# Faction Activities Table Renderer
+# =================================
+def fetch_faction_activities(system_name: str, period: str):
+    # period: ct|lt|tickid
+    params = {"system": system_name, "period": period, "group": "faction"}
+    data = get_json("activities/system-summary", params=params) or []
+    if isinstance(data, dict):
+        data = [data]
+    # Nur Sicherheit: auf System filtern
+    if system_name:
+        data = [r for r in data if (r.get("system") or "").lower() == system_name.lower()]
+    return data
+
+def render_faction_activities_table(rows: list):
+    """
+    Erwartet Response-Liste aus /api/activities/system-summary?group=faction.
+    Zeigt je Minor Faction eine Zeile
+    """
+    if not rows:
+        st.info("No data.")
+        return
+
+    # Nur nach Faction sortieren (State entfällt)
+    rows = sorted(rows, key=lambda r: str(r.get("faction", "")))
+
+    # In DataFrame überführen – NUR gewünschte Spalten
+    table = []
+    for r in rows:
+        table.append({
+            "Faction": r.get("faction", "-"),
+            # INF
+            "INF Pri": r.get("total_inf_primary", 0),
+            "INF Sec": r.get("total_inf_secondary", 0),
+            # TRADE (Buy / Sell / Profit)
+            "Buy Items":  r.get("buy_items_total", 0),
+            "Buy Value":  r.get("buy_value_total", 0),
+            "Sell Items": r.get("sell_items_total", 0),
+            "Sell Value": r.get("sell_value_total", 0),
+            "Profit":     r.get("sell_profit_total", 0),
+            # BM / BVs / Exploration / CBs / Fails
+            "BM":    r.get("total_trade_bm", 0),
+            "BVs":   r.get("total_bvs", 0),
+            "Expl":  r.get("total_exploration", 0),
+            "CBs":   r.get("total_cbs", 0),
+            "Fails": r.get("total_mission_fails", 0),
+            # Murders / S&R
+            "Murders (Ground)": r.get("total_murders_ground", 0),
+            "Murders (Ship)":   r.get("total_murders_ship", 0),
+            "S&R":              r.get("total_sandr", 0),
+            # CZs
+            "SpaceCZ L":  r.get("cz_space_L", 0),
+            "SpaceCZ M":  r.get("cz_space_M", 0),
+            "SpaceCZ H":  r.get("cz_space_H", 0),
+            "GroundCZ L": r.get("cz_ground_L", 0),
+            "GroundCZ M": r.get("cz_ground_M", 0),
+            "GroundCZ H": r.get("cz_ground_H", 0),
+        })
+
+    df = pd.DataFrame(table).set_index("Faction")
+
+    # Formatter (en-US) + rechtsbündige Zahlen
+    def _fmt_en_num(x):
+        try:
+            v = float(x)
+            return f"{v:,.0f}" if abs(v - int(v)) < 1e-9 else f"{v:,.2f}"
+        except Exception:
+            return "" if x is None else x
+
+    num_cols = list(df.columns)
+    styled = (
+        df.style
+          .format({c: _fmt_en_num for c in num_cols})
+          .set_properties(subset=num_cols, **{"text-align": "right", "min-width": "80px"})
+    )
+    st.table(styled)
+
 # ============================
 # Page Render, Filter & Search
 # ============================
@@ -773,8 +1171,8 @@ def render():
     _apply_reset_if_requested()
 
     # CSS für kompakte Filter-UI
-    inject_compact_filter_css(width_px=260)  # fixe Breite pro Control
-    inject_aligned_rows_css(col_px=260, chk_px=180, gap_rem=.26)
+    inject_compact_filter_css(width_px=200)
+    inject_three_col_rows_css(col_px=200, gap_rem=.22)
 
     # FILTER als FORM – löst keine Suche aus, bis "Search" geklickt wird
     with st.form("system_filters"):
@@ -796,31 +1194,21 @@ def render():
         # System (Expander)
         # =========================
         with st.expander("System", expanded=True):
-            # Marker für das gemeinsame Grid (ID ändern!)
             st.markdown('<span id="sys-row"></span>', unsafe_allow_html=True)
 
-            # 7 Columns laut Grid: 5 Felder + Checkbox-Slot + Filler
-            sys_c1, sys_c2, sys_c3, sys_c4, sys_c5, sys_c6, _ = st.columns(7)
+            # 3 Felder + Spacer
+            sys_cols = st.columns(3)
 
-            with sys_c1:
-                system_name = st.selectbox(
-                    "System Name",
-                    system_name_options,
-                    index=sel_index,
-                    key="system_name_filter"
-                )
-            with sys_c2:
-                population_preset = st.selectbox(
-                    "Population",
-                    list(POP_PRESETS.keys()),
-                    index=0,
-                    key="population_preset_filter",
-                )
-            with sys_c3:
+            with sys_cols[0]:
+                system_name = st.selectbox("System Name", system_name_options, index=sel_index,
+                                           key="system_name_filter")
+            with sys_cols[1]:
+                population_preset = st.selectbox("Population", list(POP_PRESETS.keys()), index=0,
+                                                 key="population_preset_filter")
+            with sys_cols[2]:
                 has_conflict = st.checkbox("Has Conflict", value=False, key="has_conflict_filter")
-            # sys_c4/5 frei, sys_c6 frei (Checkbox-Slot) -> hält das Raster
 
-            # Ableiten min/max + evtl. Custom
+            # Ableitung Min/Max + optional Custom
             pop_min, pop_max = POP_PRESETS[population_preset]
             if pop_min == "custom" and pop_max == "custom":
                 cx1, cx2 = st.columns(2)
@@ -847,34 +1235,33 @@ def render():
         # Faction (Expander)
         # =========================
         with st.expander("Faction", expanded=False):
-            st.markdown('<span id="fac-row"></span>', unsafe_allow_html=True)
-            fac_c1, fac_c2, fac_c3, fac_c4, fac_c5, fac_c6, _ = st.columns(7)
-
-            with fac_c1:
+            # Zeile 1
+            st.markdown('<span id="fac-row-1"></span>', unsafe_allow_html=True)
+            f1_cols = st.columns(3)
+            with f1_cols[0]:
                 cur = st.session_state.get("faction_filter", "")
                 snap_val = snap.get("faction", "")
                 opts, idx = build_stable_options(factions, cur, snap_val)
                 faction = st.selectbox("Faction", opts, index=idx, key="faction_filter")
-
-            with fac_c2:
+            with f1_cols[1]:
                 cur = st.session_state.get("controlling_faction_filter", "")
                 snap_val = snap.get("controlling_faction", "")
                 opts, idx = build_stable_options(controlling_factions, cur, snap_val)
                 controlling_faction = st.selectbox("Controlling Faction", opts, index=idx,
                                                    key="controlling_faction_filter")
-
-            with fac_c3:
+            with f1_cols[2]:
                 state = st.selectbox("State", [""] + list(STATE_COLORS.keys()), key="state_filter")
 
-            with fac_c4:
+            # Zeile 2
+            st.markdown('<span id="fac-row-2"></span>', unsafe_allow_html=True)
+            f2_cols = st.columns(3)
+            with f2_cols[0]:
                 pending_state = st.selectbox("Pending State", [""] + list(STATE_COLORS.keys()),
                                              key="pending_state_filter")
-
-            with fac_c5:
+            with f2_cols[1]:
                 recovering_state = st.selectbox("Recovering State", [""] + list(STATE_COLORS.keys()),
                                                 key="recovering_state_filter")
-
-            with fac_c6:
+            with f2_cols[2]:
                 controlling_faction_in_conflict = st.checkbox(
                     "Controlling Faction in conflict",
                     value=False,
@@ -887,25 +1274,24 @@ def render():
         # =========================
         with st.expander("Power", expanded=False):
             st.markdown('<span id="pow-row"></span>', unsafe_allow_html=True)
-            pow_c1, pow_c2, pow_c3, pow_c4, pow_c5, pow_c6, _ = st.columns(7)
 
-            with pow_c1:
+            p_cols = st.columns(3)
+            with p_cols[0]:
                 cur = st.session_state.get("controlling_power_filter", "")
                 snap_val = snap.get("controlling_power", "")
                 opts, idx = build_stable_options(controlling_powers, cur, snap_val)
                 controlling_power = st.selectbox("Controlling Power", opts, index=idx, key="controlling_power_filter")
-            with pow_c2:
+            with p_cols[1]:
                 cur = st.session_state.get("power_filter", "")
                 snap_val = snap.get("power", "")
                 opts, idx = build_stable_options(powers, cur, snap_val)
                 power = st.selectbox("Power", opts, index=idx, key="power_filter")
-            with pow_c3:
+            with p_cols[2]:
                 powerplay_state = st.selectbox(
                     "Powerplay State",
                     [""] + ["Unoccupied", "Fortified", "Exploited", "Stronghold"],
                     key="powerplay_state_filter"
                 )
-            # pow_c4/5 frei, pow_c6 frei (Checkbox-Slot) -> hält das Raster
 
         # =========================
         # Parameter zusammenstellen
@@ -1014,65 +1400,42 @@ def render():
         #render_header_chips(sysinfo, pp0, conflict_count)
         render_grouped_header(sysinfo, pp0, conflict_count)
 
-        # Minor Factions
-        factions = entry.get("factions", []) or []
-        with st.expander("👥 Minor Factions", expanded=False):
-            if not factions:
-                st.info("No minor factions found.")
-            else:
-                df = pd.DataFrame([
-                    {
-                        "Name": f.get("name", ""),
-                        "Allegiance": f.get("allegiance", ""),
-                        "Government": humanize_constant(f.get("government", ""), "gov") if f.get("government") else "",
-                        "State": "" if (f.get("state") in (None, "", "None")) else f.get("state"),
-                        "Influence": f.get("influence", 0.0),
-                        "Active States": ", ".join(to_state_list(f.get("active_states"))),
-                        "Pending": ", ".join(to_state_list(f.get("pending_states"))),
-                        "Recovering": ", ".join(to_state_list(f.get("recovering_states"))),
-                    }
-                    for f in factions
-                ])
+        # Buttons CMDR Events / System Activities / Faction Activities
+        c1, c2, c3, c4, c5, c6 = st.columns([1, 1, 1, 1, 1, 1])
 
-                df = df.sort_values(by="Influence", ascending=False).reset_index(drop=True)
-                df.index = df.index + 1
-                df.index.name = "#"
+        clicked = {
+            "cmdr_ct": c1.button("CMDR Events (CT)", key=f"cmdr_ct_{sys_name}"),
+            "cmdr_lt": c2.button("CMDR Events (LT)", key=f"cmdr_lt_{sys_name}"),
+            "sys_ct": c3.button("System Activities (CT)", key=f"sys_ct_{sys_name}"),
+            "sys_lt": c4.button("System Activities (LT)", key=f"sys_lt_{sys_name}"),
+            "fac_ct": c5.button("Faction Activities (CT)", key=f"fac_ct_{sys_name}"),
+            "fac_lt": c6.button("Faction Activities (LT)", key=f"fac_lt_{sys_name}"),
+        }
 
-                styled = (
-                    df.style
-                    .applymap(style_state, subset=["State"])
-                    .applymap(style_states_cell, subset=["Active States"])
-                    .applymap(style_states_cell, subset=["Pending"])
-                    .applymap(style_states_cell, subset=["Recovering"])
-                    .format({
-                        "Influence": fmt_pct,
-                        "State": fmt_state_text,
-                        "Active States": fmt_states_text,
-                        "Pending": fmt_states_text,
-                        "Recovering": fmt_states_text,
-                    })
-                    .set_properties(subset=["Influence"], **{
-                        "text-align": "right",
-                        "min-width": "90px", "max-width": "90px",
-                    })
-                    .set_properties(subset=["Name"], **{
-                        "min-width": "200px", "max-width": "200px",
-                    })
-                    .set_properties(subset=["Allegiance"], **{
-                        "min-width": "100px", "max-width": "100px",
-                    })
-                    .set_properties(subset=["Government"], **{
-                        "min-width": "120px", "max-width": "120px",
-                    })
-                    .set_properties(subset=["State"], **{
-                        "text-align": "center",
-                        "min-width": "140px", "max-width": "160px",
-                    })
-                    .set_properties(subset=["Active States", "Pending", "Recovering"], **{
-                        "min-width": "180px", "max-width": "220px",
-                    })
-                )
-                st.table(styled)
+        # CMDR Events
+        if clicked["cmdr_ct"] or clicked["cmdr_lt"]:
+            period = "ct" if clicked["cmdr_ct"] else "lt"
+            results = fetch_all_cmdr_summaries(sys_name, period)
+            render_cmdr_activity_block(sys_name, period, results)
+
+        # System Activities
+        if clicked["sys_ct"] or clicked["sys_lt"]:
+            period = "ct" if clicked["sys_ct"] else "lt"
+            rows = fetch_system_activities(sys_name, period)
+            with st.expander(f"🛰️ System Activities — {sys_name} [{period.upper()}]", expanded=True):
+                render_system_activities_table(rows)
+
+        # Faction Activities
+        if clicked["fac_ct"] or clicked["fac_lt"]:
+            period = "ct" if clicked["fac_ct"] else "lt"
+            rows = fetch_faction_activities(sys_name, period)
+            with st.expander(f"🏳️ Faction Activities — {sys_name} [{period.upper()}]", expanded=True):
+                render_faction_activities_table(rows)
+
+        # --- Minor Factions ---
+        minor_factions = entry.get("factions") or entry.get("minor_factions") or []
+        with st.expander("📊 Minor Factions", expanded=False):
+            render_minor_factions_table(minor_factions)
 
         # --- Conflicts ---
         conflicts = entry.get("conflicts", []) or []

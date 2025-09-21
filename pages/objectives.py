@@ -1,8 +1,97 @@
 import streamlit as st
 from datetime import datetime
 import json
-from api_client import get_json, post_json
+from api_client import get_json, post_json, delete_json  # delete_json importieren
 from auth import user_has_access
+from urllib.parse import quote
+from pages.system_info import chip_css, chip, render_grouped_header, render_conflicts_table, render_minor_factions_table
+
+
+def _truncate(s: str, n: int = 80) -> str:
+    if not s:
+        return ""
+    s = str(s).strip()
+    return (s[:n] + "…") if len(s) > n else s
+
+
+_TARGET_CLASS = {
+    "visit": "info",
+    "inf": "ok",
+    "bv": "ok",
+    "cb": "ok",
+    "expl": "sky",
+    "trade_prof": "sky",
+    "bm_prof": "vio",
+    "ground_cz": "warn",
+    "space_cz": "warn",
+    "murder": "red",
+    "mission_fail": "red",
+}
+
+
+# Hilfsfunktionen für Chips
+def _chip(label, value, klass="neut"):
+    if value in (None, "", "-", "null"):
+        return ""
+    return chip(label, value, klass)
+
+
+def _objective_chip_row(obj: dict) -> str:
+    from datetime import datetime
+    status = "Active"
+    try:
+        if obj.get("enddate") and obj["enddate"] < datetime.utcnow().isoformat():
+            status = "Expired"
+    except Exception:
+        pass
+
+    # Zeilenweise Chips aufbauen
+    row1 = [
+        _chip("Title", obj.get("title") or "—", "info"),
+        _chip("Type", (obj.get("type") or "—").upper(), "ok"),
+        _chip("Priority", obj.get("priority") or "0", "vio"),
+        _chip("System", obj.get("system") or "—", "info"),
+        _chip("Faction", obj.get("faction") or "—", "ok"),
+    ]
+    row2 = [
+        _chip("Start", obj.get("startdate") or "—", "neut"),
+        _chip("End", obj.get("enddate") or "—", "neut"),
+        _chip("Status", status, "sky"),
+    ]
+    row3 = [
+        _chip("Desc", _truncate(obj.get("description")), "neut"),
+    ]
+
+    html = [chip_css()]  # Styles einmalig einfügen
+    html.append('<div class ="valk-title">Objective Info</div>')
+    for row in [row1, row2, row3]:
+        html.append(f'<div class="valk-badges">{"".join([c for c in row if c])}</div>')
+
+    return "\n".join(html)
+
+
+def _target_chip_row(obj: dict, t: dict) -> str:
+    ttype = (t.get("type") or "-").strip().lower()
+    klass = _TARGET_CLASS.get(ttype, "neut")
+    system = t.get("system") or obj.get("system") or "—"
+    station = t.get("station") or "—"
+    faction = t.get("faction") or obj.get("faction") or "—"
+    indiv = int((t.get("targetindividual") or 0) or 0)
+    overall = int((t.get("targetoverall") or 0) or 0)
+    prog = int((t.get("progress") or 0) or 0)
+
+    chips = [
+        _chip("Type", (ttype or "-").upper(), klass),
+        _chip("System", system, "info"),
+        _chip("Station", station, "neut") if station != "—" else "",
+        _chip("Faction", faction, "ok") if faction != "—" else "",
+        _chip("Target/CMDR", f"{indiv:,}".replace(",", "."), "sky"),
+        _chip("Target Overall", f"{overall:,}".replace(",", "."), "sky"),
+        _chip("Progress", f"{prog:,}%".replace(",", "."), "vio"),
+        _chip("Target ID", t.get("id") or "—", "neut"),
+    ]
+    return chip_css() + f'<div class ="valk-title">Target Info</div><div class="valk-badges">{"".join([c for c in chips if c])}</div>'
+
 
 def render():
     if not user_has_access(st.session_state.user, '5_Objectives'):
@@ -35,27 +124,64 @@ def render():
         objectives_data = get_json('objectives', params=params)
 
         if objectives_data:
-            for obj in objectives_data:
-                with st.expander(f"🎯 {obj.get('title', 'Unnamed')} (Priority: {obj.get('priority', 'N/A')})"):
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.write(f"**Type:** {obj.get('type', 'N/A')}")
-                        st.write(f"**System:** {obj.get('system', 'N/A')}")
-                        st.write(f"**Faction:** {obj.get('faction', 'N/A')}")
-                    with col2:
-                        st.write(f"**Start Date:** {obj.get('startdate', 'N/A')}")
-                        st.write(f"**End Date:** {obj.get('enddate', 'N/A')}")
-                        st.write(f"**Status:** {'Active' if obj.get('enddate') > datetime.now().isoformat() else 'Expired'}")
 
-                    if obj.get('description'):
-                        st.write(f"**Description:** {obj['description']}")
+            # Haupt-Rendering-Schleife
+            for obj_idx, obj in enumerate(objectives_data):
+                # Oberer Expander je Objective (Titel enthält System & Index, damit eindeutig)
+                header = f"🎯 {obj.get('title', 'Unnamed')} — {obj.get('system', 'n/a')} · #{obj_idx + 1}"
+                with st.expander(header, expanded=False):
+                    # Objective NUR als Chips
+                    st.markdown(_objective_chip_row(obj), unsafe_allow_html=True)
 
-                    if obj.get('targets'):
-                        st.write("**Targets:**")
-                        for i, target in enumerate(obj['targets']):
-                            st.write(f"  • Target {i+1}: {target.get('type', 'N/A')} "
-                                   f"(Individual: {target.get('targetindividual', 0)}, "
-                                   f"Overall: {target.get('targetoverall', 0)})")
+                    # Targets
+                    targets = obj.get("targets") or []
+                    if targets:
+                        #st.subheader("🎯 Targets")
+                        for t_idx, t in enumerate(targets):
+                            # Target-Expander (nur Chips im Kopf)
+                            title = f"{(t.get('type') or 'TARGET').upper()} — {t.get('system') or obj.get('system') or 'n/a'} · #{t_idx + 1}"
+                            with st.expander(title, expanded=False):
+                                st.markdown(_target_chip_row(obj, t), unsafe_allow_html=True)
+
+                                # Untergeordneter Expander: System-Infos (Header-Chips identisch zu system_info.py)
+                                sys_name = (t.get("system") or obj.get("system") or "").strip()
+                                if sys_name:
+                                    sys_title = f"🪐 {sys_name} — System Info · target#{t_idx + 1}"
+                                    with st.expander(sys_title, expanded=False):
+                                        try:
+                                            data = get_json(f"system-summary/{quote(sys_name, safe='')}")
+                                            entry = data if isinstance(data, dict) else (
+                                                data[0] if (isinstance(data, list) and data) else {})
+                                            sysinfo = entry.get("system_info", {}) or {}
+                                            pp_list = entry.get("powerplays") or []
+                                            conflicts = entry.get("conflicts", []) or []
+                                            pp0 = pp_list[0] if pp_list else {}
+
+                                            # identische Kopf-Chips wie auf der Systemseite
+                                            render_grouped_header(sysinfo, pp0, len(conflicts))
+
+                                            # ---------- Minor Factions ----------
+                                            with st.expander("👥 Minor Factions", expanded=False):
+                                                factions = entry.get("factions") or []
+                                                render_minor_factions_table(factions)
+
+                                            # ---------- Conflicts ----------
+                                            with st.expander("⚔️ Conflicts", expanded=False):
+                                                if conflicts:
+                                                    render_conflicts_table(conflicts)
+                                                else:
+                                                    st.info("No conflicts in this system.")
+
+
+                                        except Exception as e:
+                                            st.error(f"Error loading system info for {sys_name}: {e}")
+                                else:
+                                    st.info("No system defined for this target.")
+                    else:
+                        st.info("No targets defined.")
+
+
+
         else:
             st.info("No objectives found with the current filters.")
 
@@ -63,22 +189,22 @@ def render():
         st.header("➕ Create New BGS Objective")
 
         # Mission-Level Fields
-        title = st.text_input("Title", placeholder="e.g. Go to War in Sol")
-        priority = st.number_input("Priority", min_value=1, max_value=5, step=1, value=1)
+        title = st.text_input("Title", placeholder="e.g. Go to War in Sol", key="title_input")
+        priority = st.number_input("Priority", min_value=1, max_value=5, step=1, value=1, key="priority_input")
         type_ = st.selectbox("Mission Type", [
             "recon", "win_war", "draw_war", "win_election", "draw_election",
             "boost", "expand", "reduce", "retreat", "equalise"
-        ])
-        system = st.text_input("Target System", placeholder="e.g. Sol")
-        faction = st.text_input("Primary Faction", placeholder="e.g. East India Company")
-        description = st.text_area("Description (optional)")
+        ], key="type_input")
+        system = st.text_input("Target System", placeholder="e.g. Sol", key="system_input")
+        faction = st.text_input("Primary Faction", placeholder="e.g. East India Company", key="faction_input")
+        description = st.text_area("Description (optional)", key="desc_input")
 
-        startdate = st.date_input("Start Date", value=datetime.today())
-        enddate = st.date_input("End Date")
+        startdate = st.date_input("Start Date", value=datetime.today(), key="startdate_input")
+        enddate = st.date_input("End Date", key="enddate_input")
 
         # Targets (multiple possible)
         st.subheader("🎯 Add Targets")
-        num_targets = st.number_input("Number of Targets", min_value=1, max_value=5, value=1)
+        num_targets = st.number_input("Number of Targets", min_value=1, max_value=5, value=1, key="num_targets_input")
         targets = []
 
         for i in range(num_targets):
@@ -142,15 +268,12 @@ def render():
             "targets": targets
         }
 
-        st.subheader("🧾 JSON Preview")
-        st.json(objective)
-
         if st.button("🚀 Create Objective", type="primary"):
             try:
-                # Nutze post_json aus api_client.py
                 response = post_json('objectives', objective)
                 if response and response.get('id'):
                     st.success("✅ Objective created successfully!")
+                    # Seite neu laden, damit Felder und Listen aktualisiert werden
                     st.rerun()
                 else:
                     st.error(f"❌ Failed to create objective: {response}")
@@ -191,7 +314,7 @@ def render():
                 with col2:
                     if st.button("🗑️ Delete Objective", type="secondary", disabled=not confirm_delete):
                         try:
-                            response = post_json(f"objectives/{objective_id}", {})
+                            response = delete_json(f"objectives/{objective_id}")
                             if response and response.get('success'):
                                 st.success("✅ Objective deleted successfully!")
                                 st.rerun()

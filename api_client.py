@@ -27,12 +27,26 @@ def get_json(path, params=None):
     return r.json()
 
 
-def post_json(path):
+def post_json(path, payload=None):
     url = f"{API_BASE}/{path}"
     headers = {
         "apikey": get_api_key(),
         "apiversion": API_VERSION
     }
-    r = requests.post(url, headers=headers)
+    if payload is not None:
+        r = requests.post(url, headers=headers, json=payload)
+    else:
+        r = requests.post(url, headers=headers)
     r.raise_for_status()
-    return r.status_code
+    return r.json()
+
+
+def delete_json(path):
+    url = f"{API_BASE}/{path}"
+    headers = {
+        "apikey": get_api_key(),
+        "apiversion": API_VERSION
+    }
+    r = requests.delete(url, headers=headers)
+    r.raise_for_status()
+    return r.json()
