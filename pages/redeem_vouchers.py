@@ -22,8 +22,11 @@ def render():
         "lm": "Last Month",
         "2m": "Last 2 Months",
         "y": "Current Year",
-        "all": "All Time"
+        "all": "All Time",
+        "ct": "Current Tick",
+        "lt": "Last Tick"
     }
+
     selected_label = st.selectbox("Select period:", list(period_labels.values()))
     selected_period = [k for k, v in period_labels.items() if v == selected_label][0]
 

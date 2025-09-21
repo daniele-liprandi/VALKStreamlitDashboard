@@ -254,9 +254,9 @@ def render():
             st.markdown("**⚔️ Space CZ Summary**")
             period_space = st.selectbox(
                 "Period",
-                options=["cd", "ld", "lw", "cm", "lm", "2m", "y", "all"],
+                options=["ct", "lt", "cd", "ld", "lw", "cm", "lm", "2m", "y", "all"],
                 format_func=lambda x: {
-                    "cd": "Current Day",
+                    "ct": "Current Tick", "lt": "Last Tick", "cd": "Current Day",
                     "ld": "Last Day", "lw": "Last Week", "cm": "Current Month",
                     "lm": "Last Month", "2m": "Last 2 Months", "y": "Year", "all": "All Time"
                 }[x],
@@ -273,9 +273,9 @@ def render():
             st.markdown("**🏃 Ground CZ Summary**")
             period_ground = st.selectbox(
                 "Period",
-                options=["cd", "ld", "lw", "cm", "lm", "2m", "y", "all"],
+                options=["ct", "lt", "cd", "ld", "lw", "cm", "lm", "2m", "y", "all"],
                 format_func=lambda x: {
-                    "cd": "Current Day",
+                    "ct": "Current Tick", "lt": "Last Tick", "cd": "Current Day",
                     "ld": "Last Day", "lw": "Last Week", "cm": "Current Month",
                     "lm": "Last Month", "2m": "Last 2 Months", "y": "Year", "all": "All Time"
                 }[x],
@@ -321,8 +321,8 @@ def render():
                 if custom_message.strip():
                     try:
                         api_client.post_json("discord/trigger/custom-message", {
-                            "message": custom_message.strip(),
-                            "webhook_type": webhook_choice,
+                            "content": custom_message.strip(),
+                            "webhook": webhook_choice,
                             "username": username
                         })
                         st.success(f"✅ Message sent to {webhook_choice} channel!")
