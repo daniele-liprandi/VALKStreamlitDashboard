@@ -1022,10 +1022,16 @@ def render_system_activities_table(rows: list):
     num_cols = list(df.columns)
     styled = (
         df.style
-          .format({c: _fmt_en_num for c in num_cols})
-          .set_properties(subset=num_cols, **{"text-align": "right", "min-width": "90px"})
+        .format({c: _fmt_en_num for c in num_cols})
+        .set_properties(subset=num_cols, **{"text-align": "right", "min-width": "90px"})
+        # ⬇️ NEU: Index-Spalte breiter machen
+        .set_table_styles([
+            {"selector": "th.row_heading", "props": "min-width:200px;"},
+            {"selector": "th.row_heading.level0", "props": "min-width:200px;"},
+        ])
     )
     st.table(styled)
+
 
 # =================================
 # Faction Activities Table Renderer
@@ -1099,10 +1105,16 @@ def render_faction_activities_table(rows: list):
     num_cols = list(df.columns)
     styled = (
         df.style
-          .format({c: _fmt_en_num for c in num_cols})
-          .set_properties(subset=num_cols, **{"text-align": "right", "min-width": "80px"})
+        .format({c: _fmt_en_num for c in num_cols})
+        .set_properties(subset=num_cols, **{"text-align": "right", "min-width": "80px"})
+        # ⬇️ NEU: Index-Spalte breiter machen
+        .set_table_styles([
+            {"selector": "th.row_heading", "props": "min-width:200px;"},
+            {"selector": "th.row_heading.level0", "props": "min-width:200px;"},
+        ])
     )
     st.table(styled)
+
 
 # ============================
 # Page Render, Filter & Search
@@ -1416,7 +1428,7 @@ def render():
         if clicked["cmdr_ct"] or clicked["cmdr_lt"]:
             period = "ct" if clicked["cmdr_ct"] else "lt"
             results = fetch_all_cmdr_summaries(sys_name, period)
-            render_cmdr_activity_block(sys_name, period, results)
+            render_cmdr_events_block(sys_name, period, results)
 
         # System Activities
         if clicked["sys_ct"] or clicked["sys_lt"]:

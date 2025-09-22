@@ -4,7 +4,12 @@ import json
 from api_client import get_json, post_json, delete_json  # delete_json importieren
 from auth import user_has_access
 from urllib.parse import quote
-from pages.system_info import chip_css, chip, render_grouped_header, render_conflicts_table, render_minor_factions_table
+from pages.system_info import (
+    chip_css, chip, render_grouped_header, render_conflicts_table, render_minor_factions_table,
+    fetch_system_activities, render_system_activities_table,
+    fetch_faction_activities, render_faction_activities_table,
+)
+
 
 
 def _truncate(s: str, n: int = 80) -> str:
@@ -160,12 +165,44 @@ def render():
                                             # identische Kopf-Chips wie auf der Systemseite
                                             render_grouped_header(sysinfo, pp0, len(conflicts))
 
-                                            # ---------- Minor Factions ----------
+                                            # Buttons: eine Zeile, vier Aktionen
+                                            c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
+
+                                            clicked = {
+                                                "sys_ct": c1.button("System Activities (CT)",
+                                                                    key=f"obj_sys_ct_{sys_name}_{t_idx}"),
+                                                "sys_lt": c2.button("System Activities (LT)",
+                                                                    key=f"obj_sys_lt_{sys_name}_{t_idx}"),
+                                                "fac_ct": c3.button("Faction Activities (CT)",
+                                                                    key=f"obj_fac_ct_{sys_name}_{t_idx}"),
+                                                "fac_lt": c4.button("Faction Activities (LT)",
+                                                                    key=f"obj_fac_lt_{sys_name}_{t_idx}"),
+                                            }
+
+                                            # System Activities
+                                            if clicked["sys_ct"] or clicked["sys_lt"]:
+                                                period = "ct" if clicked["sys_ct"] else "lt"
+                                                rows = fetch_system_activities(sys_name, period)
+                                                with st.expander(
+                                                        f"🛰️ System Activities — {sys_name} [{period.upper()}]",
+                                                        expanded=True):
+                                                    render_system_activities_table(rows)
+
+                                            # Faction Activities
+                                            if clicked["fac_ct"] or clicked["fac_lt"]:
+                                                period = "ct" if clicked["fac_ct"] else "lt"
+                                                rows = fetch_faction_activities(sys_name, period)
+                                                with st.expander(
+                                                        f"🏳️ Faction Activities — {sys_name} [{period.upper()}]",
+                                                        expanded=True):
+                                                    render_faction_activities_table(rows)
+
+                                            # Minor Factions
                                             with st.expander("👥 Minor Factions", expanded=False):
                                                 factions = entry.get("factions") or []
                                                 render_minor_factions_table(factions)
 
-                                            # ---------- Conflicts ----------
+                                            # Conflicts
                                             with st.expander("⚔️ Conflicts", expanded=False):
                                                 if conflicts:
                                                     render_conflicts_table(conflicts)
