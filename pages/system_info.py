@@ -6,7 +6,7 @@ from api_client import get_json
 from urllib.parse import quote
 from _global import STATE_COLORS, STATE_ICONS, GOVERNMENT_COLORS
 
-from system_info_aesthetics import *
+from pages.system_info_aesthetics import *
 
 
 
@@ -541,7 +541,7 @@ def render_minor_factions_table(factions: list) -> None:
 # ================================
 def fetch_system_activities(system_name: str, period: str):
     params = {"system": system_name, "period": period}  # ct|lt|tickid
-    data = get_json("activities/system-summary", params=params) or []
+    data = get_json("activities", params=params) or []
     # Server kann einzelnes Objekt liefern → Liste herstellen
     if isinstance(data, dict):
         data = [data]
@@ -613,7 +613,7 @@ def render_system_activities_table(rows: list):
 def fetch_faction_activities(system_name: str, period: str):
     # period: ct|lt|tickid
     params = {"system": system_name, "period": period, "group": "faction"}
-    data = get_json("activities/system-summary", params=params) or []
+    data = get_json("activities", params=params) or []
     if isinstance(data, dict):
         data = [data]
     # Nur Sicherheit: auf System filtern
@@ -623,7 +623,7 @@ def fetch_faction_activities(system_name: str, period: str):
 
 def render_faction_activities_table(rows: list):
     """
-    Erwartet Response-Liste aus /api/activities/system-summary?group=faction.
+    Erwartet Response-Liste aus /api/activities?group=faction.
     Zeigt je Minor Faction eine Zeile
     """
     if not rows:
