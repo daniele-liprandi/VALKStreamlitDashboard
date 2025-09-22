@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from api_client import get_json
-from auth import user_has_access
+from auth.auth import user_has_access
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode, JsCode
 
 def render():

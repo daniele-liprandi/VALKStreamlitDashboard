@@ -3,7 +3,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 from api_client import get_json
-from auth import user_has_access
+from auth.auth import user_has_access
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 
 def render():

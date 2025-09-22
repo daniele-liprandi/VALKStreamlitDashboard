@@ -2,7 +2,7 @@ import streamlit as st
 from datetime import datetime
 import json
 from api_client import get_json, post_json, delete_json  # delete_json importieren
-from auth import user_has_access
+from auth.auth import user_has_access
 from urllib.parse import quote
 from pages.system_info import (
     chip_css, chip, render_grouped_header, render_conflicts_table, render_minor_factions_table,

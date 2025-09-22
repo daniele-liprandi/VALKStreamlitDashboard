@@ -4,7 +4,7 @@ import json
 import ast
 from datetime import datetime, timedelta
 from api_client import get_json
-from auth import user_has_access
+from auth.auth import user_has_access
 
 st.set_page_config(layout="wide")
 

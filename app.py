@@ -1,5 +1,11 @@
 import streamlit as st
-from auth import verify_user
+from auth import auth
+from auth import login_page
+
+# Check for login and display login page if needed
+if not auth.is_logged_in():
+    login_page.render()
+    st.stop()  # Stop execution if not logged in
 
 st.set_page_config(page_title="Sinistra", layout="wide")
 
@@ -112,42 +118,31 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-
-# Login-Ansicht
-if "user" not in st.session_state:
-    with st.sidebar:
-        st.image("assets/CIU.png", width=210)
-        st.markdown('<div class="sidebar-logo-separator"></div>', unsafe_allow_html=True)
-    with st.form("login_form"):
-        st.title("Login")
-        user = st.text_input("Username")
-        pw = st.text_input("Password", type="password")
-        submitted = st.form_submit_button("Login")
-        if submitted:
-            result = verify_user(user, pw)
-            if result:
-                st.session_state.user = result
-                st.session_state.tenant_name = result.get("tenant_name", "")
-                st.rerun()
-            else:
-                st.error("Invalid username or password.")
-    st.stop()
-
 # Sidebar mit Logo und Menü
 with st.sidebar:
     st.image("assets/CIU.png", width=210)
     st.markdown('<div class="sidebar-logo-separator"></div>', unsafe_allow_html=True)
-    # Benutzername und Tenant anzeigen
-    username = st.session_state.user.get('username', 'Unbekannt')
-    tenant = st.session_state.user.get('tenant_name', 'Kein Tenant')
+    
+    # Benutzername und Tenant anzeigen (works with both login methods)
+    username = st.session_state.user.get('username', 'Unknown')
+    tenant = st.session_state.user.get('tenant_name', 'No Tenant')
+    login_type = st.session_state.user.get('login_type', 'Unknown')
+    is_admin = st.session_state.user.get('is_admin', False)
+    
+    # Show user info
     st.success(f"User: {username}")
-    st.success(f"Tenant: {tenant}")
+    if tenant:
+        st.success(f"Tenant: {tenant}")
+    st.info(f"Login Type: {login_type}")
+    if is_admin:
+        st.success("Admin: Yes")
+    
     # Logout-Button
     if st.button("Logout"):
-        st.session_state.pop("user", None)
-        st.session_state.pop("api_key", None)
-        st.session_state.pop("tenant_name", None)
+        # Use the auth logout function that handles both login types
+        auth.logout()
         st.rerun()
+        
     page = st.radio(
         "📂 Menu",
         [
@@ -163,7 +158,7 @@ with st.sidebar:
             "🛰️ System Info (EDDN)",
             "🤖 Discord Management"
         ],
-        index=3
+        index=5
     )
 
 # Seitenlogik
