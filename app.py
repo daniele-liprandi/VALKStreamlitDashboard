@@ -154,6 +154,7 @@ with st.sidebar:
             "📊 Table Viewer",
             "📈 Evaluations",
             "🧑 Cmdrs",
+            "🌏 Colonies",
             "🏆 Leaderboard",
             "🎯 Objectives",
             "🪙 Redeem Vouchers",
@@ -175,6 +176,9 @@ elif page == "📈 Evaluations":
 elif page == "🧑 Cmdrs":
     from pages import cmdrs
     cmdrs.render()
+elif page == "🌏 Colonies":
+    from pages import colonies
+    colonies.render()
 elif page == "🏆 Leaderboard":
     from pages import leaderboard
     leaderboard.render()
