@@ -1,12 +1,11 @@
 import streamlit as st
 from util import cookie_manager
+from auth import auth
 
 def render():
     if st.button("Logout"):
-        cookies = cookie_manager.get()
-        cookies['token'] = ''
-        cookies['user_id'] = ''
-        # cookies['user_email'] = ''
-        cookies['user_username'] = ''
+        # Use the centralized logout function from auth module
+        auth.logout()
         
-        st.experimental_rerun()
+        # Force a page refresh to redirect to login
+        st.rerun()

@@ -118,22 +118,24 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Sidebar mit Logo und Menü
+
 with st.sidebar:
     st.image("assets/CIU.png", width=210)
     st.markdown('<div class="sidebar-logo-separator"></div>', unsafe_allow_html=True)
     
-    # Benutzername und Tenant anzeigen (works with both login methods)
     username = st.session_state.user.get('username', 'Unknown')
-    tenant = st.session_state.user.get('tenant_name', 'No Tenant')
     login_type = st.session_state.user.get('login_type', 'Unknown')
     is_admin = st.session_state.user.get('is_admin', False)
     
     # Show user info
     st.success(f"User: {username}")
-    if tenant:
-        st.success(f"Tenant: {tenant}")
-    st.info(f"Login Type: {login_type}")
+    
+    # Show login method and access control info
+    if login_type == "discord":
+        user_roles = st.session_state.user.get('user_roles', [])
+        if user_roles:
+            st.info(f"Roles: {', '.join(user_roles[:2])}{'...' if len(user_roles) > 2 else ''}")
+    
     if is_admin:
         st.success("Admin: Yes")
     
