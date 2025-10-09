@@ -112,12 +112,27 @@ def fmt_pct(x: float) -> str:
     except Exception:
         return ""
 
-def _fmt_en_num(x):
+def fmt_en_num(x):
     try:
         v = float(x)
         return f"{v:,.0f}" if abs(v - int(v)) < 1e-9 else f"{v:,.2f}"
     except Exception:
         return x
+
+def fmt_us(n) -> str:
+    if n is None:
+        return "∞"
+    return f"{n:,}"
+
+def fmt_us_num(x):
+    if x is None or (isinstance(x, float) and pd.isna(x)): return ""
+    try:
+        v = float(x)
+        if abs(v - int(v)) < 1e-9:
+            return f"{int(v):,}"
+        return f"{v:,.2f}"
+    except Exception:
+        return str(x)
 
 # Security -> Farbklasse
 def chip_class_for_security(label: str) -> str:
@@ -151,8 +166,6 @@ def humanize_constant(val: str, kind: str) -> str:
     if not val:
         return "-"
     if kind == "gov":
-        print(f"DEBUG - Incoming gov value: '{val}'")  # Debug print
-        print(f"DEBUG - Is in GOV_OVERRIDES: {val in GOV_OVERRIDES}")  # Debug check
         if val in GOV_OVERRIDES:
             return GOV_OVERRIDES[val]
     if kind == "sec":

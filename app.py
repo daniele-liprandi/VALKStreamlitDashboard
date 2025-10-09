@@ -145,26 +145,57 @@ with st.sidebar:
         auth.logout()
         st.rerun()
         
-    page = st.radio(
-        "📂 Menu",
-        [
-            "📊 Table Viewer",
-            "📈 Evaluations",
-            "🧑 Cmdrs",
-            "🌏 Colonies",
-            "🏆 Leaderboard",
-            "🎯 Objectives",
-            "🪙 Redeem Vouchers",
-            "⚔️ CZ Summary",
+    # Check if navigation target is set from home page buttons
+    if 'navigation_target' in st.session_state:
+        default_index = 0
+        menu_items = [
+            "🏠 Home",
             "📑 24h System Report",
-            "🛰️ System Info (EDDN)",
-            "🤖 Discord Management"
-        ],
-        index=5
+            "🚩 Communists Info",
+            "🛰️ All Systems",
+            "⚔️ CZ Summary",
+            "🧑 Cmdrs",
+            "📈 Evaluations",
+            "🌏 Colonies",
+            "🪙 Redeem Vouchers",
+            "🏆 Leaderboard",
+            "📊 Table Viewer",
+            "🎯 Objectives",
+            "💬 Discord Management"
+        ]
+        target = st.session_state['navigation_target']
+        if target in menu_items:
+            default_index = menu_items.index(target)
+        del st.session_state['navigation_target']
+    else:
+        default_index = 0
+        menu_items = [
+            "🏠 Home",
+            "📑 24h System Report",
+            "🚩 Communists Info",
+            "🛰️ All Systems",
+            "⚔️ CZ Summary",
+            "🧑 Cmdrs",
+            "📈 Evaluations",
+            "🌏 Colonies",
+            "🪙 Redeem Vouchers",
+            "🏆 Leaderboard",
+            "📊 Table Viewer",
+            "🎯 Objectives",
+            "💬 Discord Management"
+        ]
+    
+    page = st.radio(
+        "Menu",
+        menu_items,
+        index=default_index
     )
 
 # Seitenlogik
-if page == "📊 Table Viewer":
+if page == "🏠 Home":
+    from pages import home
+    home.render()
+elif page == "📊 Table Viewer":
     from pages import view_table
     view_table.render()
 elif page == "📈 Evaluations":
@@ -191,9 +222,12 @@ elif page == "⚔️ CZ Summary":
 elif page == "📑 24h System Report":
     from pages import fsdjump_factions_report
     fsdjump_factions_report.render()
-elif page == "🛰️ System Info (EDDN)":
+elif page == "🛰️ All Systems":
     from pages import system_info
     system_info.render()
-elif page == "🤖 Discord Management":
+elif page == "🚩 Communists Info":
+    from pages import system_info_communists
+    system_info_communists.render()
+elif page == "💬 Discord Management":
     from pages import discord_management
     discord_management.render()

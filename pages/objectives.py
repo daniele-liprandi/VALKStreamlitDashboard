@@ -2,7 +2,7 @@ import streamlit as st
 from datetime import datetime
 import json
 from api_client import get_json, post_json, delete_json  # delete_json importieren
-from auth.auth import user_has_access
+from auth.auth import user_has_access, user_has_required_roles
 from urllib.parse import quote
 from pages.system_info import (
     chip_css, chip, render_grouped_header, render_conflicts_table, render_minor_factions_table,
@@ -10,6 +10,18 @@ from pages.system_info import (
     fetch_faction_activities, render_faction_activities_table,
 )
 
+def user_has_objectives_access(user):
+    """
+    Check if user has access to the objectives page.
+    Requires admin, mods, or vet role.
+    """
+    required_roles = [
+        "Administrator",  # admin
+        "Moderator",  # mods  
+        "Comrade [Veteran]", # vet
+    ]
+    
+    return user_has_required_roles(user, required_roles)
 
 
 def _truncate(s: str, n: int = 80) -> str:
@@ -99,8 +111,18 @@ def _target_chip_row(obj: dict, t: dict) -> str:
 
 
 def render():
-    if not user_has_access(st.session_state.user, '5_Objectives'):
-        st.error('Unauthorized')
+
+    user = st.session_state.get('user')
+    if not user_has_objectives_access(user):
+        st.error('Unauthorized - You do not have the required roles to access this page.')
+        if user.get("login_type") == "discord":
+            with st.expander("🔍 Access Debug Information"):
+                st.write(f"**Username:** {user.get('username', 'Unknown')}")
+                st.write(f"**Discord ID:** {user.get('discord_id', 'Unknown')}")
+                st.write(f"**Current Roles:** {', '.join(user.get('user_roles', [])) if user.get('user_roles') else 'None detected'}")
+                st.write(f"**Required Roles:** admin, mods, vet, comr")
+                st.info("If you believe you should have access, please contact a server administrator to verify your role assignments.")
+        
         st.stop()
 
     st.set_page_config(page_title="🎯 Objectives Management")
@@ -233,7 +255,7 @@ def render():
             "boost", "expand", "reduce", "retreat", "equalise"
         ], key="type_input")
         system = st.text_input("Target System", placeholder="e.g. Sol", key="system_input")
-        faction = st.text_input("Primary Faction", placeholder="e.g. East India Company", key="faction_input")
+        faction = st.text_input("Primary Faction", placeholder="e.g. Communist Interstellar Union", key="faction_input")
         description = st.text_area("Description (optional)", key="desc_input")
 
         startdate = st.date_input("Start Date", value=datetime.today(), key="startdate_input")
@@ -265,7 +287,7 @@ def render():
             settlements = []
             if target_type == "ground_cz":
                 st.markdown("🏘️ Target Settlements:")
-                num_settlements = st.number_input("Number of Settlements", min_value=0, max_value=5, value=0, key=f"settlement_count_{i}")
+                num_settlements = st.number_input("Number of Settlements per tick", min_value=0, max_value=5, value=0, key=f"settlement_count_{i}")
                 for j in range(num_settlements):
                     name = st.text_input(f"Settlement {j+1} – Name", key=f"settlement_name_{i}_{j}")
                     t_indiv = st.number_input(f"Settlement {j+1} – Target per CMDR", min_value=0, key=f"settlement_indiv_{i}_{j}")

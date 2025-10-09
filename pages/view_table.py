@@ -4,12 +4,25 @@ import json
 import ast
 from datetime import datetime, timedelta
 from api_client import get_json
-from auth.auth import user_has_access
+from auth.auth import user_has_access, user_has_required_roles
 
 st.set_page_config(layout="wide")
 
+def user_has_bgstable_access(user):
+    """
+    Check if user has access to the BGS table viewer.
+    Requires admin, mods, or vet role.
+    """
+    required_roles = [
+        "Administrator",  # admin
+        "Moderator",  # mods  
+        "Comrade [Veteran]", # vet
+    ]
+    
+    return user_has_required_roles(user, required_roles)
+
 def render():
-    if not user_has_access(st.session_state.user, '1_TableView'):
+    if not user_has_access(st.session_state.user, '1_TableView') or not user_has_bgstable_access(st.session_state.user):
         st.error('Unauthorized')
         st.stop()
 

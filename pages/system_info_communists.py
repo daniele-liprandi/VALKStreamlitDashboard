@@ -722,7 +722,7 @@ def render():
     st.text("Shows system summary and minor factions. Filter by API parameters.")
 
     # Dropdown-Listen laden (können leer/flackernd sein)
-    system_names = get_list_from_api("lists/systems")
+    system_names = get_list_from_api("lists/systems?any-faction-government=Communism")
     factions = get_list_from_api("lists/factions")
     controlling_factions = get_list_from_api("lists/controlling-factions")
     controlling_powers = get_list_from_api("lists/controlling-powers")
@@ -819,11 +819,11 @@ def render():
                 controlling_faction = st.selectbox("Controlling Faction", opts, index=idx,
                                                    key="controlling_faction_filter")
             with f1_cols[2]:
-                state = st.selectbox("State", [""] + list(STATE_COLORS.keys()), key="state_filter")
+                state = st.selectbox("State of selected government", [""] + list(STATE_COLORS.keys()), key="state_filter")
 
             with f1_cols[3]:
                 government = st.selectbox("Government", [""] + list(GOVERNMENT_COLORS.keys()),
-                                          key="government_filter")
+                                          key="government_filter", index=6) # default value Communism
 
             # Zeile 2
             st.markdown('<span id="fac-row-2"></span>', unsafe_allow_html=True)
@@ -875,7 +875,7 @@ def render():
         if controlling_power: params["controlling_power"] = controlling_power
         if power: params["power"] = power
         if powerplay_state: params["powerplay_state"] = powerplay_state
-        if state: params["state"] = state
+        if state: params["state_government"] = state + ":" + government
         if government: params["government"] = government
         if pending_state: params["pending_state"] = pending_state
         if recovering_state: params["recovering_state"] = recovering_state

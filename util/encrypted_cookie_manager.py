@@ -14,7 +14,7 @@ from streamlit_cookies_manager import CookieManager
 # From https://github.com/ktosiek/streamlit-cookies-manager
 # Patched to fix deprecated st.cache warning
 
-@st.cache_data
+# @st.cache_data
 def key_from_parameters(salt: bytes, iterations: int, password: str):
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),

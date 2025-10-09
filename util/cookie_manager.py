@@ -6,7 +6,6 @@ cookie_secret = st.secrets["auth"]["cookie_secret"]
 
 # Create a unique prefix per browser session to prevent cross-user contamination
 def get_session_id():
-    """Generate a unique session ID for this browser session that persists across page reloads"""
     if 'session_id' not in st.session_state:
         session_data = str(id(st.session_state))
         st.session_state.session_id = hashlib.md5(session_data.encode()).hexdigest()[:12]

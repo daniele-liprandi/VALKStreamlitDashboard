@@ -85,7 +85,7 @@ def render():
         </style>
     """, unsafe_allow_html=True)
 
-    # Show logo at the top
+    # Show logo at the top centered
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.image("assets/CIU.png", width=300)
@@ -99,6 +99,16 @@ def render():
             pass
         return
     
+    # Box message for donation. I want people to thank me by donating for the palestinian cause at https://www.palestinercs.org/en
+    with st.container():
+        st.markdown("""
+        <div class="access-requirements">
+            <h3>Support SINISTRA</h3>
+            <p>Hi, I am the developer of SINISTRA. Making this app takes time, but I love doing it. Many are not as privileged as me. If you find this website useful and you want to support me and others, please donate to the Palestinian Red Crescent Society.</p>
+            <p><a href="https://www.palestinercs.org/en" target="_blank">Donate to PRCS 🇵🇸</a></p>
+        </div>
+        """, unsafe_allow_html=True)
+
     # Login form (traditional)
     with st.container():     
 

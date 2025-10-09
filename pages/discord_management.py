@@ -3,14 +3,30 @@ import pandas as pd
 from datetime import datetime
 import api_client
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode, DataReturnMode
+from auth.auth import user_has_required_roles
+
+
+def user_has_discord_access(user):
+    """
+    Check if user has access to the Discord management page.
+    Requires admin, mods, or vet role.
+    """
+    required_roles = [
+        "Administrator",  # admin
+        "Moderator",  # mods  
+        "Comrade [Veteran]", # vet
+    ]
+    
+    return user_has_required_roles(user, required_roles)
+
 
 def render():
     st.title("Discord Management")
     
     # Check if user is admin
     user = st.session_state.get("user", {})
-    if not user.get("is_admin"):
-        st.error("⛔ Access denied. This page requires administrator privileges.")
+    if not user.get("is_admin") and not user_has_discord_access(user):
+        st.error("⛔ Access denied. This page requires high privileges.")
         return
     
     try:

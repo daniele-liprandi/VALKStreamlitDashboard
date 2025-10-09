@@ -8,3 +8,6 @@ altair
 plotly
 python-dotenv
 authlib
+streamlit-cookies-manager
+httpx-oauth
+aiohttp>=3.8.0
