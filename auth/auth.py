@@ -9,7 +9,7 @@ load_dotenv()
 API_BASE = os.getenv("API_BASE")
 API_KEY = os.getenv("API_KEY")
 
-# Try to import bot functionality with better error handling
+# Try to import bot
 BOT_AVAILABLE = False
 check_user_roles_with_bot = None
 
@@ -18,14 +18,14 @@ try:
     if "discord" in st.secrets and "bot_token" in st.secrets["discord"] and st.secrets["discord"]["bot_token"]:
         from auth.discord_bot_roles import check_user_roles_with_bot
         BOT_AVAILABLE = True
-        print("✅ Discord bot functionality loaded successfully")
+        st.success("✅ Discord bot functionality loaded successfully")
     else:
-        print("ℹ️ Bot token not found in secrets - using basic server check")
+        st.info("ℹ️ Bot token not found in secrets - using basic server check")
 except ImportError as e:
-    print(f"ℹ️ Discord bot module not available: {e}")
+    st.warning(f"ℹ️ Discord bot module not available: {e}")
     BOT_AVAILABLE = False
 except Exception as e:
-    print(f"⚠️ Error loading bot functionality: {e}")
+    st.error(f"⚠️ Error loading bot functionality: {e}")
     BOT_AVAILABLE = False
 
 def get_api_key():
@@ -50,8 +50,18 @@ def is_logged_in():
     Check if a user is logged in, either via Discord OAuth or traditional login.
     Returns True if logged in, False otherwise.
     """
+    # SECURITY: Force session isolation by checking browser fingerprint
+    browser_id = get_browser_fingerprint()
+    print(f"Current browser ID: {browser_id}")
     # First, check for traditional login in session state
     if "user" in st.session_state and st.session_state.user:
+        # Verify this session belongs to this browser
+        session_browser = st.session_state.get('browser_id', '')
+        print(f"Session browser ID: {session_browser}, Current browser ID: {browser_id}")
+        if session_browser != browser_id:
+            # Session hijacking detected - clear everything
+            clear_all_session_data()
+            return False
         return True
     
     # Check if we're in the OAuth flow FIRST
@@ -64,6 +74,14 @@ def is_logged_in():
 
     if 'token' in cookies and cookies['token'] != '' and 'discord_access_verified' in cookies:
         try:
+            # Verify cookie belongs to this browser
+            cookie_browser = cookies.get('browser_id', '')
+            print(f"Cookie browser ID: {cookie_browser}, Current browser ID: {browser_id}")
+            if cookie_browser != browser_id:
+                # Cross-browser contamination - clear cookies
+                clear_discord_cookies()
+                return False
+                
             token = discord_oauth.json_str_to_token(cookies['token'])
 
             if not token.is_expired():
@@ -73,9 +91,13 @@ def is_logged_in():
                     )
                     cookies['user_id'] = user_id
                     cookies['user_username'] = user_data['username'] + '#' + user_data['discriminator']
+                    cookies['browser_id'] = browser_id
                     cookies.save()
                 
                 if "user" not in st.session_state:
+                    # Set browser ID in session state for verification
+                    st.session_state.browser_id = browser_id
+                    
                     st.session_state.user = {
                         "username": cookies['user_username'],
                         "discord_id": cookies['user_id'],
@@ -83,7 +105,8 @@ def is_logged_in():
                         "login_type": "discord",
                         "server_access": cookies.get('discord_access_verified') == 'true',
                         "user_roles": json.loads(cookies.get('user_roles', '[]')),
-                        "access_method": cookies.get('access_method', 'Unknown')
+                        "access_method": cookies.get('access_method', 'Unknown'),
+                        "browser_id": browser_id
                     }
                     
                 try:
@@ -100,6 +123,34 @@ def is_logged_in():
             return False
     
     return False
+
+def get_browser_fingerprint():
+    """
+    Create a unique identifier for this browser session.
+    """
+    import time
+    import hashlib
+    
+    # Use Streamlit's session info plus timestamp for first visit
+    if 'browser_fingerprint' not in st.session_state:
+        # Create unique fingerprint based on session object ID and timestamp
+        session_data = f"{id(st.session_state)}_{time.time()}_{hash(str(st.session_state))}"
+        fingerprint = hashlib.sha256(session_data.encode()).hexdigest()[:16]
+        st.session_state.browser_fingerprint = fingerprint
+    
+    return st.session_state.browser_fingerprint
+
+def clear_all_session_data():
+    """
+    Nuclear option: clear all session and cookie data.
+    """
+    # Clear session state
+    keys_to_remove = [key for key in st.session_state.keys()]
+    for key in keys_to_remove:
+        del st.session_state[key]
+    
+    # Clear cookies
+    clear_discord_cookies()
 
 def process_oauth_callback(code):
     """
@@ -165,8 +216,13 @@ def process_oauth_callback(code):
 
         print(f"✅ Access granted via {access_method}")
         
-        # Store successful login data
+        # Get browser fingerprint for security
+        browser_id = get_browser_fingerprint()
+        
+        # Store successful login data with browser tracking
         cookies = cookie_manager.get()
+        cookies['browser_id'] = browser_id  # Track which browser this login belongs to
+        cookies['session_id'] = getattr(st.session_state, 'session_id', '')  # Link cookie to session
         cookies['token'] = json.dumps(token)
         cookies['user_id'] = user_id
         cookies['user_username'] = user_data['username'] + '#' + user_data['discriminator']
@@ -180,7 +236,8 @@ def process_oauth_callback(code):
         
         cookies.save()
         
-        # Initialize session state
+        # Initialize session state with browser tracking
+        st.session_state.browser_id = browser_id
         st.session_state.user = {
             "username": user_data['username'] + '#' + user_data['discriminator'],
             "discord_id": user_id,
@@ -191,7 +248,8 @@ def process_oauth_callback(code):
             "user_roles": user_roles,
             "member_since": access_check.get('member_since'),
             "nickname": access_check.get('nickname'),
-            "access_method": access_method
+            "access_method": access_method,
+            "browser_id": browser_id  # Track browser in session
         }
         
         # Backend verification
@@ -390,3 +448,38 @@ def reverify_discord_access():
     except Exception as e:
         print(f"Error re-verifying Discord access: {e}")
         return True  # Don't log out on temporary errors
+
+def user_has_required_roles(user, required_roles):
+    """
+    Check if user has any of the required Discord roles.
+    
+    Args:
+        user: User session data containing user_roles
+        required_roles: List of role names or IDs that grant access
+    
+    Returns:
+        bool: True if user has at least one required role, False otherwise
+    """
+    if not user or user.get("login_type") != "discord":
+        return False
+    
+    # Admin users always have access
+    if user.get("is_admin"):
+        return True
+    
+    user_roles = user.get("user_roles", [])
+    if not user_roles:
+        return False
+    
+    # Convert required_roles to strings for comparison
+    required_roles_str = [str(role) for role in required_roles]
+    
+    # Check if user has any of the required roles
+    # This handles both role names and role IDs
+    for user_role in user_roles:
+        user_role_str = str(user_role)
+        if user_role_str in required_roles_str:
+            return True
+    
+    return False
+
