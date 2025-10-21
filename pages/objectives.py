@@ -1,7 +1,7 @@
 import streamlit as st
 from datetime import datetime
 import json
-from api_client import get_json, post_json, delete_json  # delete_json importieren
+from api_client import get_json, post_json, delete_json
 from auth.auth import user_has_access, user_has_required_roles
 from urllib.parse import quote
 from pages.system_info import (
@@ -129,7 +129,7 @@ def render():
     st.title("🎯 BGS Objectives Management")
 
     # Tabs für verschiedene Funktionen
-    tab1, tab2, tab3 = st.tabs(["📋 Active Objectives", "➕ Create New", "🗑️ Delete Objective"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📋 Active Objectives", "➕ Create New", "✏️ Edit Objective", "🗑️ Delete Objective"])
 
     with tab1:
         st.header("📋 Active Objectives")
@@ -281,8 +281,8 @@ def render():
             if st.checkbox(f"Override faction for Target {i+1}", key=f"fac_check_{i}"):
                 faction_override = st.text_input("Target Faction (Override)", key=f"faction_{i}")
 
-            target_individual = st.number_input("Target Value per CMDR", min_value=0, key=f"indiv_{i}")
-            target_overall = st.number_input("Overall Target Value", min_value=0, key=f"overall_{i}")
+            target_individual = st.number_input("Target Value per CMDR (per tick)", min_value=0, key=f"indiv_{i}")
+            target_overall = st.number_input("Target Value (per tick)", min_value=0, key=f"overall_{i}")
 
             settlements = []
             if target_type == "ground_cz":
@@ -340,6 +340,194 @@ def render():
                 st.error(f"❌ Error creating objective: {str(e)}")
 
     with tab3:
+        st.header("✏️ Edit Existing Objective")
+
+        # Fetch all objectives for editing
+        all_objectives = get_json('objectives')
+
+        if all_objectives:
+            objective_options = {}
+            for obj in all_objectives:
+                key = f"{obj.get('id', 'Unknown')} - {obj.get('title', 'Unnamed')} ({obj.get('system', 'N/A')})"
+                objective_options[key] = obj
+
+            selected_key = st.selectbox(
+                "Select Objective to Edit",
+                options=list(objective_options.keys()),
+                index=0 if objective_options else None,
+                key="edit_select"
+            )
+
+            if selected_key:
+                selected_obj = objective_options[selected_key]
+                objective_id = selected_obj.get('id')
+
+                st.markdown("---")
+                st.subheader("📝 Edit Objective Details")
+
+                # Pre-populate fields with existing data
+                title = st.text_input("Title", value=selected_obj.get('title', ''), key="edit_title")
+                priority = st.number_input("Priority", min_value=1, max_value=5, step=1, 
+                                          value=int(selected_obj.get('priority', 1)), key="edit_priority")
+                type_ = st.selectbox("Mission Type", [
+                    "recon", "win_war", "draw_war", "win_election", "draw_election",
+                    "boost", "expand", "reduce", "retreat", "equalise"
+                ], index=["recon", "win_war", "draw_war", "win_election", "draw_election",
+                         "boost", "expand", "reduce", "retreat", "equalise"].index(selected_obj.get('type', 'recon')),
+                   key="edit_type")
+                
+                system = st.text_input("Target System", value=selected_obj.get('system', ''), key="edit_system")
+                faction = st.text_input("Primary Faction", value=selected_obj.get('faction', ''), key="edit_faction")
+                description = st.text_area("Description (optional)", value=selected_obj.get('description', ''), key="edit_desc")
+
+                # Parse dates
+                start_date = datetime.fromisoformat(selected_obj.get('startdate').replace('Z', '')) if selected_obj.get('startdate') else datetime.today()
+                end_date = datetime.fromisoformat(selected_obj.get('enddate').replace('Z', '')) if selected_obj.get('enddate') else datetime.today()
+
+                startdate = st.date_input("Start Date", value=start_date, key="edit_startdate")
+                enddate = st.date_input("End Date", value=end_date, key="edit_enddate")
+
+                # Targets editing
+                st.subheader("🎯 Edit Targets")
+                
+                # Initialize session state for targets if not exists
+                if f'edit_targets_{objective_id}' not in st.session_state:
+                    st.session_state[f'edit_targets_{objective_id}'] = selected_obj.get('targets', [])
+
+                targets_list = st.session_state[f'edit_targets_{objective_id}']
+
+                # Display existing targets with edit/delete options
+                for i, target in enumerate(targets_list):
+                    st.markdown(f"---\n**🎯 Target {i + 1}**")
+                    
+                    col1, col2 = st.columns([4, 1])
+                    with col1:
+                        target_type = st.selectbox(f"Target Type", [
+                            "visit", "inf", "bv", "cb", "expl", "trade_prof", "bm_prof",
+                            "ground_cz", "space_cz", "murder", "mission_fail"
+                        ], index=["visit", "inf", "bv", "cb", "expl", "trade_prof", "bm_prof",
+                                 "ground_cz", "space_cz", "murder", "mission_fail"].index(target.get('type', 'visit')),
+                           key=f"edit_ttype_{objective_id}_{i}")
+                        
+                        targets_list[i]['type'] = target_type
+                    
+                    with col2:
+                        if st.button("🗑️ Remove", key=f"remove_target_{objective_id}_{i}"):
+                            targets_list.pop(i)
+                            st.rerun()
+
+                    station = st.text_input(f"Station (optional)", value=target.get('station', ''), key=f"edit_station_{objective_id}_{i}")
+                    system_override = st.text_input("Target System (override)", value=target.get('system', ''), key=f"edit_tsys_{objective_id}_{i}")
+                    faction_override = st.text_input("Target Faction (override)", value=target.get('faction', ''), key=f"edit_tfac_{objective_id}_{i}")
+
+                    target_individual = st.number_input("Target Value per CMDR", min_value=0, 
+                                                        value=int(target.get('targetindividual', 0)), 
+                                                        key=f"edit_tindiv_{objective_id}_{i}")
+                    target_overall = st.number_input("Overall Target Value", min_value=0, 
+                                                    value=int(target.get('targetoverall', 0)), 
+                                                    key=f"edit_toverall_{objective_id}_{i}")
+
+                    # Update target data
+                    targets_list[i].update({
+                        'type': target_type,
+                        'station': station if station else None,
+                        'system': system_override if system_override else None,
+                        'faction': faction_override if faction_override else None,
+                        'targetindividual': int(target_individual),
+                        'targetoverall': int(target_overall)
+                    })
+
+                    # Settlements for ground_cz
+                    if target_type == "ground_cz":
+                        st.markdown("🏘️ Settlements:")
+                        settlements = target.get('settlements', [])
+                        
+                        for j, settlement in enumerate(settlements):
+                            col1, col2 = st.columns([4, 1])
+                            with col1:
+                                name = st.text_input(f"Settlement {j+1} Name", 
+                                                    value=settlement.get('name', ''), 
+                                                    key=f"edit_sname_{objective_id}_{i}_{j}")
+                            with col2:
+                                if st.button("🗑️", key=f"remove_settlement_{objective_id}_{i}_{j}"):
+                                    settlements.pop(j)
+                                    st.rerun()
+                            
+                            t_indiv = st.number_input(f"Settlement {j+1} Target per CMDR", min_value=0, 
+                                                     value=int(settlement.get('targetindividual', 0)), 
+                                                     key=f"edit_sindiv_{objective_id}_{i}_{j}")
+                            t_overall = st.number_input(f"Settlement {j+1} Overall Target", min_value=0, 
+                                                       value=int(settlement.get('targetoverall', 0)), 
+                                                       key=f"edit_soverall_{objective_id}_{i}_{j}")
+                            
+                            settlements[j] = {
+                                "name": name,
+                                "targetindividual": int(t_indiv),
+                                "targetoverall": int(t_overall)
+                            }
+                        
+                        targets_list[i]['settlements'] = settlements
+                        
+                        if st.button(f"➕ Add Settlement to Target {i+1}", key=f"add_settlement_{objective_id}_{i}"):
+                            if 'settlements' not in targets_list[i]:
+                                targets_list[i]['settlements'] = []
+                            targets_list[i]['settlements'].append({
+                                "name": "",
+                                "targetindividual": 0,
+                                "targetoverall": 0
+                            })
+                            st.rerun()
+
+                # Add new target button
+                if st.button("➕ Add New Target", key=f"add_target_{objective_id}"):
+                    targets_list.append({
+                        "type": "visit",
+                        "targetindividual": 0,
+                        "targetoverall": 0,
+                        "settlements": []
+                    })
+                    st.rerun()
+
+                # Save changes
+                st.markdown("---")
+                col1, col2 = st.columns([1, 4])
+                with col1:
+                    if st.button("💾 Save Changes", type="primary", key=f"save_{objective_id}"):
+                        try:
+                            updated_objective = {
+                                "title": title,
+                                "priority": priority,
+                                "type": type_,
+                                "system": system,
+                                "faction": faction,
+                                "startdate": startdate.isoformat(),
+                                "enddate": enddate.isoformat(),
+                                "description": description,
+                                "targets": targets_list
+                            }
+                            
+                            response = post_json(f'objectives/{objective_id}', updated_objective)
+                            if response and (response.get('status') or response.get('message')):
+                                st.success("✅ Objective updated successfully!")
+                                # Clear session state
+                                if f'edit_targets_{objective_id}' in st.session_state:
+                                    del st.session_state[f'edit_targets_{objective_id}']
+                                st.rerun()
+                            else:
+                                st.error(f"❌ Failed to update objective: {response}")
+                        except Exception as e:
+                            st.error(f"❌ Error updating objective: {str(e)}")
+                
+                with col2:
+                    if st.button("🔄 Reset to Original", key=f"reset_{objective_id}"):
+                        if f'edit_targets_{objective_id}' in st.session_state:
+                            del st.session_state[f'edit_targets_{objective_id}']
+                        st.rerun()
+
+        else:
+            st.info("No objectives available for editing.")
+
+    with tab4:
         st.header("🗑️ Delete Objective")
         st.warning("⚠️ This action cannot be undone!")
 
