@@ -2,13 +2,16 @@ import streamlit as st
 from datetime import datetime
 from api_client import get_json
 from pages.system_info import chip_css, chip
+import requests
+import math
 
-def _truncate(s: str, n: int = 40) -> str:
-    """Truncate string to n characters"""
-    if not s:
-        return ""
-    s = str(s).strip()
-    return (s[:n] + "…") if len(s) > n else s
+
+def _calculate_distance(coords1, coords2):
+    """Calculate Euclidean distance between two coordinate sets in 3D space"""
+    dx = coords2['x'] - coords1['x']
+    dy = coords2['y'] - coords1['y']
+    dz = coords2['z'] - coords1['z']
+    return math.sqrt(dx*dx + dy*dy + dz*dz)
 
 
 def _fetch_target_progress(target: dict, obj: dict) -> dict:
@@ -52,7 +55,7 @@ def _fetch_target_progress(target: dict, obj: dict) -> dict:
             data = get_json("summary/influence-by-faction", params={"period": "ct", "system_name": system})
             if data and isinstance(data, list):
                 # Sum influence for the specific faction
-                total = sum(row.get("influence_gained", 0) for row in data if row.get("faction") == faction)
+                total = sum(row.get("influence", 0) for row in data if row.get("faction_name") == faction)
                 return {"total": total, "label": "INF gained"}
         
         elif target_type == "expl":
@@ -112,7 +115,7 @@ def _get_target_icon(target_type: str) -> str:
     return icons.get(target_type.lower(), "🎯")
 
 
-def render_objective_card(obj: dict):
+def render_objective_card(obj: dict, user_coords=None, system_coords=None):
     """Render a compact, readable objective card"""
     status = _get_status(obj)
     status_color = "🟢" if status == "Active" else "🔴"
@@ -121,7 +124,16 @@ def render_objective_card(obj: dict):
     priority = int(obj.get("priority", 0))
     priority_stars = "⭐" * min(priority, 5)
     
-    # Card header
+    # Calculate distance if coordinates are available
+    obj_system = obj.get('system')
+    distance = None
+    if user_coords and obj_system and system_coords and obj_system in system_coords:
+        obj_coords = system_coords[obj_system]
+        distance = _calculate_distance(user_coords, obj_coords)
+    
+    # Card header with distance
+    distance_text = f" | 📏 {distance:.2f} Ly" if distance is not None else ""
+    
     st.markdown(f"""
     <div style="
         background: linear-gradient(135deg, rgba(255,75,75,0.1), rgba(255,140,0,0.1));
@@ -134,7 +146,7 @@ def render_objective_card(obj: dict):
             {status_color} {obj.get('title', 'Unnamed Objective')}
         </h3>
         <p style="margin: 0.5rem 0 0 0; color: #87CEEB; font-size: 0.9rem;">
-            {priority_stars} Priority {priority} | 📍 {obj.get('system', 'N/A')} | 🏴 {obj.get('faction', 'N/A')}
+            {priority_stars} Priority {priority} | 📍 {obj.get('system', 'N/A')} | 🏴 {obj.get('faction', 'N/A')}{distance_text}
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -173,7 +185,7 @@ def render_objective_card(obj: dict):
                     st.markdown(f"Target Overall: **{target_overall:,}**")
             
             # Show current tick progress
-            if current_total > 0:
+            if current_total >= 0:
                 col1, col2 = st.columns([1, 3])
                 with col1:
                     st.markdown(f"📊 **Current Tick:**")
@@ -187,12 +199,12 @@ def render_objective_card(obj: dict):
                     st.markdown(f"**{formatted_total}** {progress_label}")
                     
                     # Calculate percentage if target is set
-                    if target_overall > 0 and "CR" not in progress_label:
+                    if target_overall >= 0 and "CR" not in progress_label:
                         percentage = min((current_total / target_overall) * 100, 100)
                         st.progress(percentage / 100.0)
                         st.caption(f"{percentage:.1f}% of overall target")
             
-            if progress > 0:
+            if progress >= 0:
                 st.progress(min(progress / 100.0, 1.0))
             
             # Settlements for ground CZ
@@ -222,6 +234,21 @@ def render():
     # Welcome header
     user = st.session_state.get('user', {})
     username = user.get('username', 'Comrade')
+    discord_id = user.get('discord_id', None)
+    
+    # Try to get user's current system and coordinates
+    current_system = None
+    user_coords = None
+    cmdr_name = "comrade"
+    
+    if discord_id:
+        try:
+            location_data = get_json('cmdr_system', params={'discord_id': discord_id})
+            if location_data:
+                current_system = location_data.get('current_system')
+                cmdr_name = location_data.get('cmdr_name')
+        except:
+            pass
     
     st.markdown(f"""
     <div style="text-align: center; padding: 2rem 0;">
@@ -233,13 +260,31 @@ def render():
             font-size: 3rem;
             font-weight: bold;
         ">
-            ⚒️ Welcome to Sinistra, {username}! ⚒️
+            ⚒️ Welcome to Sinistra, {cmdr_name}! ⚒️
         </h1>
         <p style="color: #87CEEB; font-size: 1.2rem; margin-top: 1rem;">
             From each according to their ability, to each according to their needs
         </p>
     </div>
     """, unsafe_allow_html=True)
+    
+    # Show current location if available
+    if current_system and cmdr_name:
+        st.markdown(f"""
+        <div style="
+            text-align: center; 
+            background: linear-gradient(135deg, rgba(135,206,235,0.1), rgba(255,215,0,0.1));
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        ">
+            <p style="color: #FFD700; font-size: 1.1rem; margin: 0;">
+                📍 CMDR <strong>{cmdr_name}</strong> is currently in <strong>{current_system}</strong>
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+    elif discord_id and not cmdr_name:
+        st.info("💡 Link your commander with `/linkcmdr` on Discord to see distances to objectives and colonies!")
     
     # Quick action buttons
     st.markdown("### 🚀 Quick Actions")
@@ -262,6 +307,58 @@ def render():
     
     st.markdown("---")
     
+    # Fetch system coordinates from EDSM if we have a current system
+    system_coords = {}
+    if current_system:
+        try:
+            # Collect all system names we need
+            system_names = [current_system]
+            
+            # Get colony systems
+            try:
+                priority_colonies = get_json('colonies/priority')
+                if priority_colonies:
+                    for colony in priority_colonies:
+                        colony_system = colony.get('starsystem')
+                        if colony_system and colony_system not in system_names:
+                            system_names.append(colony_system)
+            except:
+                pass
+            
+            # Get objective systems
+            try:
+                objectives_data = get_json('objectives', params={'active': 'false'})
+                if objectives_data:
+                    for obj in objectives_data:
+                        obj_system = obj.get('system')
+                        if obj_system and obj_system not in system_names:
+                            system_names.append(obj_system)
+            except:
+                pass
+            
+            # Batch fetch coordinates from EDSM
+            if len(system_names) > 1:  # Only fetch if we have more than just current system
+                edsm_params = [('systemName[]', name) for name in system_names]
+                edsm_params.append(('showCoordinates', '1'))
+                
+                edsm_response = requests.get(
+                    'https://www.edsm.net/api-v1/systems',
+                    params=edsm_params,
+                    timeout=10
+                )
+                if edsm_response.status_code == 200:
+                    edsm_data = edsm_response.json()
+                    for system in edsm_data:
+                        name = system.get('name')
+                        coords = system.get('coords')
+                        if name and coords:
+                            system_coords[name] = coords
+                    
+                    # Get user's coordinates
+                    user_coords = system_coords.get(current_system)
+        except:
+            pass  # Silently fail if EDSM is unavailable
+    
     # Colonization Goals and Active Objectives Section
     # Use responsive layout: side by side on large screens, stacked on small screens
     try:
@@ -280,8 +377,32 @@ def render():
         
         with col_colonies:
             st.markdown("## 🌍 Colonization Goals")
+            
+            # Calculate distances for colonies and sort
+            colonies_with_distance = []
+            for colony in priority_colonies:
+                colony_system = colony.get('starsystem')
+                distance = None
+                
+                if user_coords and colony_system in system_coords:
+                    colony_coords = system_coords[colony_system]
+                    distance = _calculate_distance(user_coords, colony_coords)
+                
+                colonies_with_distance.append({
+                    'colony': colony,
+                    'distance': distance
+                })
+            
+            # Sort by distance if available, otherwise by priority
+            if user_coords:
+                colonies_with_distance.sort(key=lambda x: (x['distance'] is None, x['distance'] if x['distance'] is not None else float('inf')))
+            else:
+                colonies_with_distance.sort(key=lambda x: int(x['colony'].get('priority', 0)), reverse=True)
            
-            for colony in priority_colonies[:2]:  # Show top 2 priority colonies
+            for item in colonies_with_distance[:3]: # Show top 3 closest or highest priority
+                colony = item['colony']
+                distance = item['distance']
+                
                 priority = colony.get('priority', 0)
                 system = colony.get('starsystem', 'Unknown')
                 cmdr = colony.get('cmdr', 'N/A')
@@ -289,6 +410,9 @@ def render():
                 
                 # Priority badge
                 priority_stars = "⭐" * min(priority, 5)
+                
+                # Distance text
+                distance_text = f"📏 {distance:.2f} Ly | " if distance is not None else ""
                 
                 st.markdown(f"""
                     <div style="
@@ -302,7 +426,7 @@ def render():
                         {priority_stars} {system}
                     </h3>
                     <p style="margin: 0.25rem 0; color: #87CEEB; font-size: 0.9rem;">
-                        Commander: {cmdr}
+                        Commander: {distance_text}{cmdr}
                     </p>
                 </div>
                 """, unsafe_allow_html=True)
@@ -320,11 +444,11 @@ def render():
                     
         with col_objectives:
             st.markdown("## 🎯 Current Objectives")
-            _render_objectives_section()
+            _render_objectives_section(user_coords, system_coords)
     else:
         # No priority colonies, show objectives full width
         st.markdown("## 🎯 Current Objectives")
-        _render_objectives_section()
+        _render_objectives_section(user_coords, system_coords)
     
     # Footer
     st.markdown("---")
@@ -335,7 +459,7 @@ def render():
     """, unsafe_allow_html=True)
 
 
-def _render_objectives_section():
+def _render_objectives_section(user_coords=None, system_coords=None):
     """Helper function to render the objectives section"""
     try:
         # Fetch active objectives
@@ -353,12 +477,31 @@ def _render_objectives_section():
                 else:
                     expired_objectives.append(obj)
             
-            # Sort by priority (highest first)
-            active_objectives.sort(key=lambda x: int(x.get('priority', 0)), reverse=True)
+            # Calculate distances and add to objectives
+            objectives_with_distance = []
+            for obj in active_objectives:
+                obj_system = obj.get('system')
+                distance = None
+                
+                if user_coords and obj_system and system_coords and obj_system in system_coords:
+                    obj_coords = system_coords[obj_system]
+                    distance = _calculate_distance(user_coords, obj_coords)
+                
+                objectives_with_distance.append({
+                    'objective': obj,
+                    'distance': distance
+                })
             
-            if active_objectives:
-                for obj in active_objectives:
-                    render_objective_card(obj)
+            # Sort by distance if available, otherwise by priority
+            if user_coords:
+                objectives_with_distance.sort(key=lambda x: (x['distance'] is None, x['distance'] if x['distance'] is not None else float('inf')))
+            else:
+                objectives_with_distance.sort(key=lambda x: int(x['objective'].get('priority', 0)), reverse=True)
+            
+            if objectives_with_distance:
+                for item in objectives_with_distance:
+                    obj = item['objective']
+                    render_objective_card(obj, user_coords, system_coords)
             else:
                 st.info("No active objectives at the moment.")
             
@@ -366,7 +509,7 @@ def _render_objectives_section():
             if expired_objectives:
                 with st.expander(f"📜 Expired Objectives ({len(expired_objectives)})"):
                     for obj in expired_objectives:
-                        render_objective_card(obj)
+                        render_objective_card(obj, user_coords, system_coords)
         else:
             st.info("No current objectives exist.")
             
