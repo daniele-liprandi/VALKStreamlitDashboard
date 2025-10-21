@@ -52,12 +52,10 @@ def is_logged_in():
     """
     # SECURITY: Force session isolation by checking browser fingerprint
     browser_id = get_browser_fingerprint()
-    print(f"Current browser ID: {browser_id}")
     # First, check for traditional login in session state
     if "user" in st.session_state and st.session_state.user:
         # Verify this session belongs to this browser
         session_browser = st.session_state.get('browser_id', '')
-        print(f"Session browser ID: {session_browser}, Current browser ID: {browser_id}")
         if session_browser != browser_id:
             # Session hijacking detected - clear everything
             clear_all_session_data()

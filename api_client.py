@@ -49,6 +49,21 @@ def delete_json(path):
     return r.json()
 
 
+def put_json(path, payload=None):
+    """PUT request to update a resource"""
+    url = f"{API_BASE}/{path}"
+    headers = {
+        "apikey": get_api_key(),
+        "apiversion": API_VERSION
+    }
+    if payload is not None:
+        r = requests.put(url, headers=headers, json=payload)
+    else:
+        r = requests.put(url, headers=headers)
+    r.raise_for_status()
+    return r.json()
+
+
 # Faction Management API functions
 def get_factions():
     """Get all configured factions"""
