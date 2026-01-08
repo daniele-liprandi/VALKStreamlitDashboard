@@ -199,7 +199,7 @@ def render_objective_card(obj: dict, user_coords=None, system_coords=None):
                     st.markdown(f"**{formatted_total}** {progress_label}")
                     
                     # Calculate percentage if target is set
-                    if target_overall >= 0 and "CR" not in progress_label:
+                    if target_overall > 0 and "CR" not in progress_label:
                         percentage = min((current_total / target_overall) * 100, 100)
                         st.progress(percentage / 100.0)
                         st.caption(f"{percentage:.1f}% of overall target")
